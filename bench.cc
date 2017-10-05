@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <assert.h>
+#include <string.h>
 
 #include <vector>
 
@@ -29,6 +30,9 @@ public:
   Context(ssl_ctx_st *ctx)
     : m_ctx(ctx)
   {
+    SSL_CTX_set_options(m_ctx,
+                        SSL_OP_NO_COMPRESSION |
+                        SSL_OP_NO_RENEGOTIATION);
   }
 
   ~Context()
@@ -47,6 +51,13 @@ public:
     err = SSL_CTX_use_certificate_chain_file(m_ctx, "../rustls/test-ca/rsa/end.fullchain");
     assert(err == 1);
     err = SSL_CTX_use_PrivateKey_file(m_ctx, "../rustls/test-ca/rsa/end.key", SSL_FILETYPE_PEM);
+    assert(err == 1);
+  }
+
+  void load_client_creds()
+  {
+    int err;
+    err = SSL_CTX_load_verify_locations(m_ctx, "../rustls/test-ca/rsa/ca.cert", NULL);
     assert(err == 1);
   }
 
@@ -87,6 +98,13 @@ public:
     SSL_free(m_ssl);
   }
 
+  void set_sni(const char *hostname)
+  {
+    int err;
+    err = SSL_set_tlsext_host_name(m_ssl, hostname);
+    assert(err == 1);
+  }
+
   bool connect()
   {
     return chkerr(SSL_get_error(m_ssl, SSL_connect(m_ssl)));
@@ -97,7 +115,7 @@ public:
     return chkerr(SSL_get_error(m_ssl, SSL_accept(m_ssl)));
   }
 
-  void transfer(Conn &other)
+  void transfer_to(Conn &other)
   {
     std::vector<uint8_t> buf(262144, 0);
 
@@ -140,8 +158,10 @@ public:
   }
 };
 
-static void do_handshake(Conn& client, Conn& server)
+static void do_handshake(Conn &client, Conn &server)
 {
+  client.set_sni("localhost");
+
   while (true)
   {
     bool s_connected = server.accept();
@@ -152,8 +172,8 @@ static void do_handshake(Conn& client, Conn& server)
       return;
     }
 
-    client.transfer(server);
-    server.transfer(client);
+    client.transfer_to(server);
+    server.transfer_to(client);
   }
 }
 
@@ -167,14 +187,8 @@ static double get_time()
   return v;
 }
 
-int main(int argc, char **argv)
+static void test_bulk(Context &server_ctx, Context &client_ctx)
 {
-  Context server_ctx = Context::server();
-  Context client_ctx = Context::client();
-
-  server_ctx.set_ciphers(argv[1]);
-  server_ctx.load_server_creds();
-
   Conn server(server_ctx.open());
   Conn client(client_ctx.open());
 
@@ -192,13 +206,83 @@ int main(int argc, char **argv)
     time_send += get_time() - t;
 
     t = get_time();
-    server.transfer(client);
+    server.transfer_to(client);
     client.read(&megabyte[0], megabyte.size());
     time_recv += get_time() - t;
   }
 
   printf("send: %g MB/s\n", 1024. / time_send);
   printf("recv: %g MB/s\n", 1024. / time_recv);
+}
+
+static void test_handshake(Context &server_ctx, Context &client_ctx)
+{
+  double time_client = 0;
+  double time_server = 0;
+
+  const int handshakes = 2048;
+
+  for (int i = 0; i < handshakes; i++) {
+    Conn server(server_ctx.open());
+    Conn client(client_ctx.open());
+
+    client.set_sni("localhost");
+
+    double t;
+
+    t = get_time();
+    client.connect();
+    client.transfer_to(server);
+    time_client += get_time() - t;
+
+    t = get_time();
+    server.accept();
+    server.transfer_to(client);
+    time_server += get_time() - t;
+
+    t = get_time();
+    client.connect();
+    client.transfer_to(server);
+    time_client += get_time() - t;
+
+    t = get_time();
+    server.accept();
+    server.transfer_to(client);
+    time_server += get_time() - t;
+  }
+
+  printf("handshakes\tclient\t%g\thandshakes/s\n",
+         double(handshakes) / time_client);
+  printf("handshakes\tserver\t%g\thandshakes/s\n",
+         double(handshakes) / time_server);
+}
+
+static int usage()
+{
+  puts("usage: bench <bulk|handshake> <suite>");
+  return 1;
+}
+
+int main(int argc, char **argv)
+{
+  Context server_ctx = Context::server();
+  Context client_ctx = Context::client();
+
+  if (argc != 3) {
+    return usage();
+  }
+
+  server_ctx.set_ciphers(argv[2]);
+  server_ctx.load_server_creds();
+  client_ctx.load_client_creds();
+
+  if (!strcmp(argv[1], "bulk")) {
+    test_bulk(server_ctx, client_ctx);
+  } else if (!strcmp(argv[1], "handshake")) {
+    test_handshake(server_ctx, client_ctx);
+  } else {
+    return usage();
+  }
 
   return 0;
 }
