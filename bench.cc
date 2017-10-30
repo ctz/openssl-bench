@@ -66,6 +66,31 @@ public:
     SSL_CTX_set_cipher_list(m_ctx, ciphers);
   }
 
+  void enable_resume()
+  {
+    SSL_CTX_set_session_cache_mode(m_ctx, SSL_SESS_CACHE_BOTH);
+    SSL_CTX_set_session_id_context(m_ctx, (const uint8_t *) "localhost", strlen("localhost"));
+  }
+
+  void disable_tickets()
+  {
+    long opts = SSL_CTX_get_options(m_ctx);
+    SSL_CTX_set_options(m_ctx, opts | SSL_OP_NO_TICKET);
+  }
+
+  void dump_sess_stats()
+  {
+    printf("connects: %ld, connects-good: %ld, accepts: %ld, accepts-good: %ld\n",
+           SSL_CTX_sess_connect(m_ctx),
+           SSL_CTX_sess_connect_good(m_ctx),
+           SSL_CTX_sess_accept(m_ctx),
+           SSL_CTX_sess_accept_good(m_ctx));
+    printf("sessions: %ld, hits: %ld, misses: %ld\n",
+           SSL_CTX_sess_number(m_ctx),
+           SSL_CTX_sess_hits(m_ctx),
+           SSL_CTX_sess_misses(m_ctx));
+  }
+
   static Context server()
   {
     return Context(SSL_CTX_new(TLS_server_method()));
@@ -105,6 +130,23 @@ public:
     assert(err == 1);
   }
 
+  void set_session(SSL_SESSION *sess)
+  {
+    int err = SSL_set_session(m_ssl, sess);
+    assert(err == 1);
+  }
+
+  void ragged_close()
+  {
+    SSL_set_shutdown(m_ssl, SSL_SENT_SHUTDOWN | SSL_RECEIVED_SHUTDOWN);
+  }
+
+  SSL_SESSION * get_session()
+  {
+    ragged_close();
+    return SSL_get1_session(m_ssl);
+  }
+
   bool connect()
   {
     return chkerr(SSL_get_error(m_ssl, SSL_connect(m_ssl)));
@@ -117,7 +159,7 @@ public:
 
   void transfer_to(Conn &other)
   {
-    std::vector<uint8_t> buf(262144, 0);
+    std::vector<uint8_t> buf(256 * 1024, 0);
 
     while (true)
     {
@@ -187,7 +229,8 @@ static double get_time()
   return v;
 }
 
-static void test_bulk(Context &server_ctx, Context &client_ctx)
+static void test_bulk(Context &server_ctx, Context &client_ctx,
+                      const size_t plaintext_size)
 {
   Conn server(server_ctx.open());
   Conn client(client_ctx.open());
@@ -195,24 +238,26 @@ static void test_bulk(Context &server_ctx, Context &client_ctx)
   do_handshake(client, server);
   client.dump_cipher();
 
-  std::vector<uint8_t> megabyte(1024 * 1024, 0);
+  std::vector<uint8_t> plaintext(plaintext_size, 0);
   double time_send = 0;
   double time_recv = 0;
+  const size_t rounds = 1024;
 
-  for (int i = 0; i < 1024; i++)
+  for (size_t i = 0; i < rounds; i++)
   {
     double t = get_time();
-    server.write(&megabyte[0], megabyte.size());
+    server.write(&plaintext[0], plaintext.size());
     time_send += get_time() - t;
 
     t = get_time();
     server.transfer_to(client);
-    client.read(&megabyte[0], megabyte.size());
+    client.read(&plaintext[0], plaintext.size());
     time_recv += get_time() - t;
   }
 
-  printf("send: %g MB/s\n", 1024. / time_send);
-  printf("recv: %g MB/s\n", 1024. / time_recv);
+  const double total_mbs = (plaintext_size * rounds) / (1024. * 1024.);
+  printf("send: %g MB/s\n", total_mbs / time_send);
+  printf("recv: %g MB/s\n", total_mbs / time_recv);
 }
 
 static void test_handshake(Context &server_ctx, Context &client_ctx)
@@ -249,7 +294,80 @@ static void test_handshake(Context &server_ctx, Context &client_ctx)
     server.accept();
     server.transfer_to(client);
     time_server += get_time() - t;
+
+    assert(server.accept());
+    assert(client.accept());
   }
+
+  printf("handshakes\tclient\t%g\thandshakes/s\n",
+         double(handshakes) / time_client);
+  printf("handshakes\tserver\t%g\thandshakes/s\n",
+         double(handshakes) / time_server);
+}
+
+static void test_handshake_resume(Context &server_ctx, Context &client_ctx,
+                                  const bool with_tickets)
+{
+  double time_client = 0;
+  double time_server = 0;
+
+  const int handshakes = 4096;
+
+  server_ctx.enable_resume();
+  client_ctx.enable_resume();
+
+  if (!with_tickets) {
+    server_ctx.disable_tickets();
+    client_ctx.disable_tickets();
+  }
+
+  SSL_SESSION *client_session;
+
+  {
+    Conn initial_server(server_ctx.open());
+    Conn initial_client(client_ctx.open());
+    initial_client.set_sni("localhost");
+    do_handshake(initial_client, initial_server);
+    client_session = initial_client.get_session();
+    initial_server.ragged_close();
+  }
+
+  for (int i = 0; i < handshakes; i++) {
+    Conn server(server_ctx.open());
+    Conn client(client_ctx.open());
+
+    client.set_sni("localhost");
+    client.set_session(client_session);
+
+    double t;
+
+    t = get_time();
+    client.connect();
+    client.transfer_to(server);
+    time_client += get_time() - t;
+
+    t = get_time();
+    server.accept();
+    server.transfer_to(client);
+    time_server += get_time() - t;
+
+    t = get_time();
+    client.connect();
+    client.transfer_to(server);
+    time_client += get_time() - t;
+
+    t = get_time();
+    server.accept();
+    server.transfer_to(client);
+    time_server += get_time() - t;
+
+    assert(server.accept());
+    assert(client.connect());
+    server.ragged_close();
+    client.ragged_close();
+  }
+
+  server_ctx.dump_sess_stats();
 
   printf("handshakes\tclient\t%g\thandshakes/s\n",
          double(handshakes) / time_client);
@@ -259,7 +377,8 @@ static void test_handshake(Context &server_ctx, Context &client_ctx)
 
 static int usage()
 {
-  puts("usage: bench <bulk|handshake> <suite>");
+  puts("usage: bench <handshake|handshake-resume|handshake-ticket> <suite>");
+  puts("usage: bench bulk <suite> <plaintext-size>");
   return 1;
 }
 
@@ -268,7 +387,7 @@ int main(int argc, char **argv)
   Context server_ctx = Context::server();
   Context client_ctx = Context::client();
 
-  if (argc != 3) {
+  if (argc < 3) {
     return usage();
   }
 
@@ -276,10 +395,14 @@ int main(int argc, char **argv)
   server_ctx.load_server_creds();
   client_ctx.load_client_creds();
 
-  if (!strcmp(argv[1], "bulk")) {
-    test_bulk(server_ctx, client_ctx);
+  if (!strcmp(argv[1], "bulk") && argc == 4) {
+    test_bulk(server_ctx, client_ctx, atoi(argv[3]));
   } else if (!strcmp(argv[1], "handshake")) {
     test_handshake(server_ctx, client_ctx);
+  } else if (!strcmp(argv[1], "handshake-resume")) {
+    test_handshake_resume(server_ctx, client_ctx, false);
+  } else if (!strcmp(argv[1], "handshake-ticket")) {
+    test_handshake_resume(server_ctx, client_ctx, true);
   } else {
     return usage();
   }

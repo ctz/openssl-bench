@@ -14,5 +14,9 @@ perf.data: bench
 	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-chacha-openssl.svg
 	perf record -F9999 --call-graph dwarf -- ./bench handshake ECDHE-RSA-AES256-GCM-SHA384
 	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-fullhs-openssl.svg
+	perf record -F9999 --call-graph dwarf -- ./bench handshake-resume ECDHE-RSA-AES256-GCM-SHA384
+	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-resume-openssl.svg
+	perf record -F9999 --call-graph dwarf -- ./bench handshake-ticket ECDHE-RSA-AES256-GCM-SHA384
+	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-ticket-openssl.svg
 
 clean:; rm -f bench *.o
