@@ -241,7 +241,8 @@ static void test_bulk(Context &server_ctx, Context &client_ctx,
   std::vector<uint8_t> plaintext(plaintext_size, 0);
   double time_send = 0;
   double time_recv = 0;
-  const size_t rounds = 1024;
+  const size_t total_data = plaintext_size < 8192 ? (64 * 1024 * 1024) : (1024 * 1024 * 1024);
+  const size_t rounds = total_data / plaintext_size;
 
   for (size_t i = 0; i < rounds; i++)
   {
