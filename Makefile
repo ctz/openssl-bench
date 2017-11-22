@@ -19,4 +19,12 @@ perf.data: bench
 	perf record -F9999 --call-graph dwarf -- ./bench handshake-ticket ECDHE-RSA-AES256-GCM-SHA384
 	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-ticket-openssl.svg
 
+measure: bench
+	./bench bulk ECDHE-RSA-AES128-GCM-SHA256
+	./bench bulk ECDHE-RSA-AES256-GCM-SHA384
+	./bench bulk ECDHE-RSA-CHACHA20-POLY1305
+	./bench handshake ECDHE-RSA-AES256-GCM-SHA384
+	./bench handshake-resume ECDHE-RSA-AES256-GCM-SHA384
+	./bench handshake-ticket ECDHE-RSA-AES256-GCM-SHA384
+
 clean:; rm -f bench *.o
