@@ -250,8 +250,8 @@ static void test_bulk(Context &server_ctx, Context &client_ctx,
     server.write(&plaintext[0], plaintext.size());
     time_send += get_time() - t;
 
-    t = get_time();
     server.transfer_to(client);
+    t = get_time();
     client.read(&plaintext[0], plaintext.size());
     time_recv += get_time() - t;
   }
