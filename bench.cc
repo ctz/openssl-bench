@@ -61,9 +61,24 @@ public:
     assert(err == 1);
   }
 
+  void set_version(int minversion, int maxversion)
+  {
+    SSL_CTX_set_min_proto_version(m_ctx, minversion);
+    SSL_CTX_set_max_proto_version(m_ctx, maxversion);
+  }
+
   void set_ciphers(const char *ciphers)
   {
-    SSL_CTX_set_cipher_list(m_ctx, ciphers);
+    if (!strcmp(ciphers, "TLS_AES_128_GCM_SHA256") ||
+        !strcmp(ciphers, "TLS_AES_256_GCM_SHA384") ||
+        !strcmp(ciphers, "TLS_CHACHA20_POLY1305_SHA256"))
+    {
+      set_version(TLS1_3_VERSION, TLS1_3_VERSION);
+      SSL_CTX_set_ciphersuites(m_ctx, ciphers);
+    } else {
+      set_version(TLS1_2_VERSION, TLS1_2_VERSION);
+      SSL_CTX_set_cipher_list(m_ctx, ciphers);
+    }
   }
 
   void enable_resume()
