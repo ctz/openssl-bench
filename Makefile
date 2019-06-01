@@ -26,8 +26,12 @@ measure: bench
 	$(ENV) ./bench bulk ECDHE-RSA-AES128-GCM-SHA256 1048576
 	$(ENV) ./bench bulk ECDHE-RSA-AES256-GCM-SHA384 1048576
 	$(ENV) ./bench bulk ECDHE-RSA-CHACHA20-POLY1305 1048576
+	$(ENV) ./bench bulk TLS_AES_256_GCM_SHA384 1048576
 	$(ENV) ./bench handshake ECDHE-RSA-AES256-GCM-SHA384
 	$(ENV) ./bench handshake-resume ECDHE-RSA-AES256-GCM-SHA384
 	$(ENV) ./bench handshake-ticket ECDHE-RSA-AES256-GCM-SHA384
+	$(ENV) ./bench handshake TLS_AES_256_GCM_SHA384
+	$(ENV) ./bench handshake-resume TLS_AES_256_GCM_SHA384
+	$(ENV) ./bench handshake-ticket TLS_AES_256_GCM_SHA384
 
 clean:; rm -f bench *.o

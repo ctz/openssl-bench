@@ -87,6 +87,12 @@ public:
     SSL_CTX_set_session_id_context(m_ctx, (const uint8_t *) "localhost", strlen("localhost"));
   }
 
+  void bodge_disable_resume()
+  {
+    // To allow ticket reuse, pretend we're not caching client sessions
+    SSL_CTX_set_session_cache_mode(m_ctx, SSL_SESS_CACHE_SERVER);
+  }
+
   void disable_tickets()
   {
     long opts = SSL_CTX_get_options(m_ctx);
@@ -344,9 +350,21 @@ static void test_handshake_resume(Context &server_ctx, Context &client_ctx,
     Conn initial_client(client_ctx.open());
     initial_client.set_sni("localhost");
     do_handshake(initial_client, initial_server);
+
+    // pass some data to ensure ticket receipt
+    initial_server.write((const uint8_t *) "hello", 5);
+    initial_server.transfer_to(initial_client);
+
+    uint8_t buf[5];
+    initial_client.read(buf, 5);
+
     client_session = initial_client.get_session();
+    assert(SSL_SESSION_is_resumable(client_session));
+    initial_client.dump_cipher();
     initial_server.ragged_close();
   }
+
+  client_ctx.bodge_disable_resume();
 
   for (int i = 0; i < handshakes; i++) {
     Conn server(server_ctx.open());
@@ -354,6 +372,7 @@ static void test_handshake_resume(Context &server_ctx, Context &client_ctx,
 
     client.set_sni("localhost");
     client.set_session(client_session);
+    assert(SSL_SESSION_is_resumable(client_session));
 
     double t;
 
