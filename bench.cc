@@ -240,6 +240,15 @@ static void do_handshake(Conn &client, Conn &server)
   }
 }
 
+static size_t apply_work_multiplier(size_t work)
+{
+  const char *multiplier = getenv("BENCH_MULTIPLIER");
+  if (multiplier) {
+    return size_t(work * atof(multiplier));
+  }
+  return work;
+}
+
 static double get_time()
 {
   timeval tv;
@@ -262,7 +271,9 @@ static void test_bulk(Context &server_ctx, Context &client_ctx,
   std::vector<uint8_t> plaintext(plaintext_size, 0);
   double time_send = 0;
   double time_recv = 0;
-  const size_t total_data = plaintext_size < 8192 ? (64 * 1024 * 1024) : (1024 * 1024 * 1024);
+  const size_t total_data = apply_work_multiplier(
+      plaintext_size < 8192 ? (64 * 1024 * 1024) : (1024 * 1024 * 1024)
+  );
   const size_t rounds = total_data / plaintext_size;
 
   for (size_t i = 0; i < rounds; i++)
@@ -287,9 +298,9 @@ static void test_handshake(Context &server_ctx, Context &client_ctx)
   double time_client = 0;
   double time_server = 0;
 
-  const int handshakes = 2048;
+  const size_t handshakes = apply_work_multiplier(2048);
 
-  for (int i = 0; i < handshakes; i++) {
+  for (size_t i = 0; i < handshakes; i++) {
     Conn server(server_ctx.open());
     Conn client(client_ctx.open());
 
@@ -333,7 +344,7 @@ static void test_handshake_resume(Context &server_ctx, Context &client_ctx,
   double time_client = 0;
   double time_server = 0;
 
-  const int handshakes = 4096;
+  const size_t handshakes = apply_work_multiplier(4096);
 
   server_ctx.enable_resume();
   client_ctx.enable_resume();
@@ -366,7 +377,7 @@ static void test_handshake_resume(Context &server_ctx, Context &client_ctx,
 
   client_ctx.bodge_disable_resume();
 
-  for (int i = 0; i < handshakes; i++) {
+  for (size_t i = 0; i < handshakes; i++) {
     Conn server(server_ctx.open());
     Conn client(client_ctx.open());
 
