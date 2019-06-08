@@ -4,6 +4,7 @@ CPPFLAGS+=-I../openssl/include
 LDFLAGS+=-L../openssl
 LDLIBS+=-lssl -lcrypto -ldl -lpthread
 ENV=env LD_LIBRARY_PATH=../openssl
+MEMUSAGE=/usr/bin/time -f %M
 
 bench: bench.cc
 perf.data: bench
@@ -33,5 +34,13 @@ measure: bench
 	$(ENV) ./bench handshake TLS_AES_256_GCM_SHA384
 	$(ENV) ./bench handshake-resume TLS_AES_256_GCM_SHA384
 	$(ENV) ./bench handshake-ticket TLS_AES_256_GCM_SHA384
+
+memory: bench
+	$(ENV) $(MEMUSAGE) ./bench memory ECDHE-RSA-AES256-GCM-SHA384 100
+	$(ENV) $(MEMUSAGE) ./bench memory ECDHE-RSA-AES256-GCM-SHA384 1000
+	$(ENV) $(MEMUSAGE) ./bench memory ECDHE-RSA-AES256-GCM-SHA384 5000
+	$(ENV) $(MEMUSAGE) ./bench memory TLS_AES_256_GCM_SHA384 100
+	$(ENV) $(MEMUSAGE) ./bench memory TLS_AES_256_GCM_SHA384 1000
+	$(ENV) $(MEMUSAGE) ./bench memory TLS_AES_256_GCM_SHA384 5000
 
 clean:; rm -f bench *.o

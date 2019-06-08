@@ -129,6 +129,9 @@ class Conn
   bio_st *m_reads_from;
   bio_st *m_writes_to;
 
+  Conn(const Conn&) = delete;
+  Conn & operator=(const Conn&) = delete;
+
 public:
   Conn(ssl_st *ssl)
     : m_ssl(ssl),
@@ -137,6 +140,16 @@ public:
   {
     SSL_set0_rbio(m_ssl, m_reads_from);
     SSL_set0_wbio(m_ssl, m_writes_to);
+  }
+
+  Conn(Conn&& other)
+    : m_ssl(other.m_ssl),
+      m_reads_from(other.m_reads_from),
+      m_writes_to(other.m_writes_to)
+  {
+    other.m_ssl = nullptr;
+    other.m_reads_from = nullptr;
+    other.m_writes_to = nullptr;
   }
 
   ~Conn()
@@ -221,23 +234,26 @@ public:
   }
 };
 
+static bool do_handshake_step(Conn &client, Conn &server)
+{
+  bool s_connected = server.accept();
+  bool c_connected = client.connect();
+
+  if (s_connected && c_connected)
+  {
+    return false;
+  }
+
+  client.transfer_to(server);
+  server.transfer_to(client);
+  return true;
+}
+
 static void do_handshake(Conn &client, Conn &server)
 {
   client.set_sni("localhost");
 
-  while (true)
-  {
-    bool s_connected = server.accept();
-    bool c_connected = client.connect();
-
-    if (s_connected && c_connected)
-    {
-      return;
-    }
-
-    client.transfer_to(server);
-    server.transfer_to(client);
-  }
+  while (do_handshake_step(client, server)) {}
 }
 
 static size_t apply_work_multiplier(size_t work)
@@ -421,6 +437,41 @@ static void test_handshake_resume(Context &server_ctx, Context &client_ctx,
          double(handshakes) / time_server);
 }
 
+static void test_memory(Context &server_ctx, Context &client_ctx,
+                        size_t session_count)
+{
+  std::vector<Conn> servers;
+  std::vector<Conn> clients;
+
+  session_count /= 2;
+
+  servers.reserve(session_count);
+  clients.reserve(session_count);
+
+  for (size_t i = 0; i < session_count; i++) {
+    servers.push_back(std::move(server_ctx.open()));
+    clients.push_back(std::move(client_ctx.open()));
+    clients.back().set_sni("localhost");
+  }
+
+  for (size_t s = 0; s < 5; s++) {
+    for (size_t i = 0; i < session_count; i++) {
+      do_handshake_step(clients[i], servers[i]);
+    }
+  }
+
+  for (size_t i = 0; i < session_count; i++) {
+    uint8_t buf[1024] = { 0 };
+    clients[i].write(buf, sizeof buf);
+  }
+
+  for (size_t i = 0; i < session_count; i++) {
+    clients[i].transfer_to(servers[i]);
+    uint8_t buf[1024];
+    servers[i].read(buf, sizeof buf);
+  }
+}
+
 static int usage()
 {
   puts("usage: bench <handshake|handshake-resume|handshake-ticket> <suite>");
@@ -449,6 +500,8 @@ int main(int argc, char **argv)
     test_handshake_resume(server_ctx, client_ctx, false);
   } else if (!strcmp(argv[1], "handshake-ticket")) {
     test_handshake_resume(server_ctx, client_ctx, true);
+  } else if (!strcmp(argv[1], "memory")) {
+    test_memory(server_ctx, client_ctx, atoi(argv[3]));
   } else {
     return usage();
   }
