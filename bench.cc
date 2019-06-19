@@ -193,17 +193,17 @@ public:
 
   void transfer_to(Conn &other)
   {
-    std::vector<uint8_t> buf(256 * 1024, 0);
+    uint8_t buf[262144] = { 0 };
 
     while (true)
     {
-      int err = BIO_read(m_writes_to, &buf[0], buf.size());
+      int err = BIO_read(m_writes_to, buf, sizeof(buf));
 
       if (err == 0 || err == -1)
       {
         break;
       } else if (err > 0) {
-        BIO_write(other.m_reads_from, &buf[0], err);
+        BIO_write(other.m_reads_from, buf, err);
       }
     }
   }
@@ -314,7 +314,7 @@ static void test_handshake(Context &server_ctx, Context &client_ctx)
   double time_client = 0;
   double time_server = 0;
 
-  const size_t handshakes = apply_work_multiplier(2048);
+  const size_t handshakes = apply_work_multiplier(512);
 
   for (size_t i = 0; i < handshakes; i++) {
     Conn server(server_ctx.open());
@@ -489,6 +489,7 @@ int main(int argc, char **argv)
   }
 
   server_ctx.set_ciphers(argv[2]);
+  client_ctx.set_ciphers(argv[2]);
   server_ctx.load_server_creds();
   client_ctx.load_client_creds();
 
