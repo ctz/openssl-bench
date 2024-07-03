@@ -34,6 +34,16 @@ measure: bench
 	$(ENV) ./bench handshake TLS_AES_256_GCM_SHA384
 	$(ENV) ./bench handshake-resume TLS_AES_256_GCM_SHA384
 	$(ENV) ./bench handshake-ticket TLS_AES_256_GCM_SHA384
+	$(ENV) ./bench --ecdsa handshake ECDHE-ECDSA-AES256-GCM-SHA384
+	$(ENV) ./bench --ecdsa handshake TLS_AES_256_GCM_SHA384
+
+measure-rsa: bench
+	$(ENV) ./bench --rsa handshake TLS_AES_256_GCM_SHA384
+	$(ENV) ./bench --rsa handshake ECDHE-RSA-AES256-GCM-SHA384
+
+measure-ecdsa: bench
+	$(ENV) ./bench --ecdsa handshake TLS_AES_256_GCM_SHA384
+	$(ENV) ./bench --ecdsa handshake ECDHE-ECDSA-AES256-GCM-SHA384
 
 memory: bench
 	$(ENV) $(MEMUSAGE) ./bench memory ECDHE-RSA-AES256-GCM-SHA384 100
