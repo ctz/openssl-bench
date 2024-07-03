@@ -1,19 +1,17 @@
-#include <openssl/ssl.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
+#include <openssl/ssl.h>
 
 #include <sys/time.h>
 
-#include <stdio.h>
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <vector>
 
-static bool chkerr(int err)
-{
-  if (err == SSL_ERROR_SYSCALL)
-  {
+static bool chkerr(int err) {
+  if (err == SSL_ERROR_SYSCALL) {
     ERR_print_errors_fp(stdout);
     puts("error");
     exit(1);
@@ -22,57 +20,44 @@ static bool chkerr(int err)
   return err == 0;
 }
 
-class Context
-{
+class Context {
   ssl_ctx_st *m_ctx;
 
 public:
-  Context(ssl_ctx_st *ctx)
-    : m_ctx(ctx)
-  {
-    SSL_CTX_set_options(m_ctx,
-                        SSL_OP_NO_COMPRESSION |
-                        SSL_OP_NO_RENEGOTIATION);
+  Context(ssl_ctx_st *ctx) : m_ctx(ctx) {
+    SSL_CTX_set_options(m_ctx, SSL_OP_NO_COMPRESSION | SSL_OP_NO_RENEGOTIATION);
   }
 
-  ~Context()
-  {
-    SSL_CTX_free(m_ctx);
-  }
+  ~Context() { SSL_CTX_free(m_ctx); }
 
-  ssl_st * open()
-  {
-    return SSL_new(m_ctx);
-  }
+  ssl_st *open() { return SSL_new(m_ctx); }
 
-  void load_server_creds()
-  {
+  void load_server_creds() {
     int err;
-    err = SSL_CTX_use_certificate_chain_file(m_ctx, "../rustls/test-ca/rsa/end.fullchain");
+    err = SSL_CTX_use_certificate_chain_file(
+        m_ctx, "../rustls/test-ca/rsa/end.fullchain");
     assert(err == 1);
-    err = SSL_CTX_use_PrivateKey_file(m_ctx, "../rustls/test-ca/rsa/end.key", SSL_FILETYPE_PEM);
+    err = SSL_CTX_use_PrivateKey_file(m_ctx, "../rustls/test-ca/rsa/end.key",
+                                      SSL_FILETYPE_PEM);
     assert(err == 1);
   }
 
-  void load_client_creds()
-  {
+  void load_client_creds() {
     int err;
-    err = SSL_CTX_load_verify_locations(m_ctx, "../rustls/test-ca/rsa/ca.cert", NULL);
+    err = SSL_CTX_load_verify_locations(m_ctx, "../rustls/test-ca/rsa/ca.cert",
+                                        NULL);
     assert(err == 1);
   }
 
-  void set_version(int minversion, int maxversion)
-  {
+  void set_version(int minversion, int maxversion) {
     SSL_CTX_set_min_proto_version(m_ctx, minversion);
     SSL_CTX_set_max_proto_version(m_ctx, maxversion);
   }
 
-  void set_ciphers(const char *ciphers)
-  {
+  void set_ciphers(const char *ciphers) {
     if (!strcmp(ciphers, "TLS_AES_128_GCM_SHA256") ||
         !strcmp(ciphers, "TLS_AES_256_GCM_SHA384") ||
-        !strcmp(ciphers, "TLS_CHACHA20_POLY1305_SHA256"))
-    {
+        !strcmp(ciphers, "TLS_CHACHA20_POLY1305_SHA256")) {
       set_version(TLS1_3_VERSION, TLS1_3_VERSION);
       SSL_CTX_set_ciphersuites(m_ctx, ciphers);
     } else {
@@ -81,126 +66,94 @@ public:
     }
   }
 
-  void enable_resume()
-  {
+  void enable_resume() {
     SSL_CTX_set_session_cache_mode(m_ctx, SSL_SESS_CACHE_BOTH);
-    SSL_CTX_set_session_id_context(m_ctx, (const uint8_t *) "localhost", strlen("localhost"));
+    SSL_CTX_set_session_id_context(m_ctx, (const uint8_t *)"localhost",
+                                   strlen("localhost"));
   }
 
-  void bodge_disable_resume()
-  {
+  void bodge_disable_resume() {
     // To allow ticket reuse, pretend we're not caching client sessions
     SSL_CTX_set_session_cache_mode(m_ctx, SSL_SESS_CACHE_SERVER);
   }
 
-  void disable_tickets()
-  {
+  void disable_tickets() {
     long opts = SSL_CTX_get_options(m_ctx);
     SSL_CTX_set_options(m_ctx, opts | SSL_OP_NO_TICKET);
   }
 
-  void dump_sess_stats()
-  {
-    printf("connects: %ld, connects-good: %ld, accepts: %ld, accepts-good: %ld\n",
-           SSL_CTX_sess_connect(m_ctx),
-           SSL_CTX_sess_connect_good(m_ctx),
-           SSL_CTX_sess_accept(m_ctx),
-           SSL_CTX_sess_accept_good(m_ctx));
+  void dump_sess_stats() {
+    printf(
+        "connects: %ld, connects-good: %ld, accepts: %ld, accepts-good: %ld\n",
+        SSL_CTX_sess_connect(m_ctx), SSL_CTX_sess_connect_good(m_ctx),
+        SSL_CTX_sess_accept(m_ctx), SSL_CTX_sess_accept_good(m_ctx));
     printf("sessions: %ld, hits: %ld, misses: %ld\n",
-           SSL_CTX_sess_number(m_ctx),
-           SSL_CTX_sess_hits(m_ctx),
+           SSL_CTX_sess_number(m_ctx), SSL_CTX_sess_hits(m_ctx),
            SSL_CTX_sess_misses(m_ctx));
   }
 
-  static Context server()
-  {
-    return Context(SSL_CTX_new(TLS_server_method()));
-  }
+  static Context server() { return Context(SSL_CTX_new(TLS_server_method())); }
 
-  static Context client()
-  {
-    return Context(SSL_CTX_new(TLS_client_method()));
-  }
+  static Context client() { return Context(SSL_CTX_new(TLS_client_method())); }
 };
 
-class Conn
-{
+class Conn {
   ssl_st *m_ssl;
   bio_st *m_reads_from;
   bio_st *m_writes_to;
 
-  Conn(const Conn&) = delete;
-  Conn & operator=(const Conn&) = delete;
+  Conn(const Conn &) = delete;
+  Conn &operator=(const Conn &) = delete;
 
 public:
   Conn(ssl_st *ssl)
-    : m_ssl(ssl),
-      m_reads_from(BIO_new(BIO_s_mem())),
-      m_writes_to(BIO_new(BIO_s_mem()))
-  {
+      : m_ssl(ssl), m_reads_from(BIO_new(BIO_s_mem())),
+        m_writes_to(BIO_new(BIO_s_mem())) {
     SSL_set0_rbio(m_ssl, m_reads_from);
     SSL_set0_wbio(m_ssl, m_writes_to);
   }
 
-  Conn(Conn&& other)
-    : m_ssl(other.m_ssl),
-      m_reads_from(other.m_reads_from),
-      m_writes_to(other.m_writes_to)
-  {
+  Conn(Conn &&other)
+      : m_ssl(other.m_ssl), m_reads_from(other.m_reads_from),
+        m_writes_to(other.m_writes_to) {
     other.m_ssl = nullptr;
     other.m_reads_from = nullptr;
     other.m_writes_to = nullptr;
   }
 
-  ~Conn()
-  {
-    SSL_free(m_ssl);
-  }
+  ~Conn() { SSL_free(m_ssl); }
 
-  void set_sni(const char *hostname)
-  {
+  void set_sni(const char *hostname) {
     int err;
     err = SSL_set_tlsext_host_name(m_ssl, hostname);
     assert(err == 1);
   }
 
-  void set_session(SSL_SESSION *sess)
-  {
+  void set_session(SSL_SESSION *sess) {
     int err = SSL_set_session(m_ssl, sess);
     assert(err == 1);
   }
 
-  void ragged_close()
-  {
+  void ragged_close() {
     SSL_set_shutdown(m_ssl, SSL_SENT_SHUTDOWN | SSL_RECEIVED_SHUTDOWN);
   }
 
-  SSL_SESSION * get_session()
-  {
+  SSL_SESSION *get_session() {
     ragged_close();
     return SSL_get1_session(m_ssl);
   }
 
-  bool connect()
-  {
-    return chkerr(SSL_get_error(m_ssl, SSL_connect(m_ssl)));
-  }
+  bool connect() { return chkerr(SSL_get_error(m_ssl, SSL_connect(m_ssl))); }
 
-  bool accept()
-  {
-    return chkerr(SSL_get_error(m_ssl, SSL_accept(m_ssl)));
-  }
+  bool accept() { return chkerr(SSL_get_error(m_ssl, SSL_accept(m_ssl))); }
 
-  void transfer_to(Conn &other)
-  {
-    uint8_t buf[262144] = { 0 };
+  void transfer_to(Conn &other) {
+    uint8_t buf[262144] = {0};
 
-    while (true)
-    {
+    while (true) {
       int err = BIO_read(m_writes_to, buf, sizeof(buf));
 
-      if (err == 0 || err == -1)
-      {
+      if (err == 0 || err == -1) {
         break;
       } else if (err > 0) {
         BIO_write(other.m_reads_from, buf, err);
@@ -208,23 +161,17 @@ public:
     }
   }
 
-  void dump_cipher()
-  {
-    printf("negotiated %s with %s\n",
-           SSL_get_cipher_version(m_ssl),
+  void dump_cipher() {
+    printf("negotiated %s with %s\n", SSL_get_cipher_version(m_ssl),
            SSL_get_cipher(m_ssl));
   }
 
-  void write(const uint8_t *buf, size_t n)
-  {
-    chkerr(SSL_get_error(m_ssl,
-                         SSL_write(m_ssl, buf, n)));
+  void write(const uint8_t *buf, size_t n) {
+    chkerr(SSL_get_error(m_ssl, SSL_write(m_ssl, buf, n)));
   }
 
-  void read(uint8_t *buf, size_t n)
-  {
-    while (n)
-    {
+  void read(uint8_t *buf, size_t n) {
+    while (n) {
       int rd = SSL_read(m_ssl, buf, n);
 
       assert(rd >= 0);
@@ -234,13 +181,11 @@ public:
   }
 };
 
-static bool do_handshake_step(Conn &client, Conn &server)
-{
+static bool do_handshake_step(Conn &client, Conn &server) {
   bool s_connected = server.accept();
   bool c_connected = client.connect();
 
-  if (s_connected && c_connected)
-  {
+  if (s_connected && c_connected) {
     return false;
   }
 
@@ -249,15 +194,14 @@ static bool do_handshake_step(Conn &client, Conn &server)
   return true;
 }
 
-static void do_handshake(Conn &client, Conn &server)
-{
+static void do_handshake(Conn &client, Conn &server) {
   client.set_sni("localhost");
 
-  while (do_handshake_step(client, server)) {}
+  while (do_handshake_step(client, server)) {
+  }
 }
 
-static size_t apply_work_multiplier(size_t work)
-{
+static size_t apply_work_multiplier(size_t work) {
   const char *multiplier = getenv("BENCH_MULTIPLIER");
   if (multiplier) {
     return size_t(work * atof(multiplier));
@@ -265,8 +209,7 @@ static size_t apply_work_multiplier(size_t work)
   return work;
 }
 
-static double get_time()
-{
+static double get_time() {
   timeval tv;
   gettimeofday(&tv, NULL);
 
@@ -276,8 +219,7 @@ static double get_time()
 }
 
 static void test_bulk(Context &server_ctx, Context &client_ctx,
-                      const size_t plaintext_size)
-{
+                      const size_t plaintext_size) {
   Conn server(server_ctx.open());
   Conn client(client_ctx.open());
 
@@ -288,12 +230,10 @@ static void test_bulk(Context &server_ctx, Context &client_ctx,
   double time_send = 0;
   double time_recv = 0;
   const size_t total_data = apply_work_multiplier(
-      plaintext_size < 8192 ? (64 * 1024 * 1024) : (1024 * 1024 * 1024)
-  );
+      plaintext_size < 8192 ? (64 * 1024 * 1024) : (1024 * 1024 * 1024));
   const size_t rounds = total_data / plaintext_size;
 
-  for (size_t i = 0; i < rounds; i++)
-  {
+  for (size_t i = 0; i < rounds; i++) {
     double t = get_time();
     server.write(&plaintext[0], plaintext.size());
     time_send += get_time() - t;
@@ -309,8 +249,7 @@ static void test_bulk(Context &server_ctx, Context &client_ctx,
   printf("recv: %g MB/s\n", total_mbs / time_recv);
 }
 
-static void test_handshake(Context &server_ctx, Context &client_ctx)
-{
+static void test_handshake(Context &server_ctx, Context &client_ctx) {
   double time_client = 0;
   double time_server = 0;
 
@@ -355,8 +294,7 @@ static void test_handshake(Context &server_ctx, Context &client_ctx)
 }
 
 static void test_handshake_resume(Context &server_ctx, Context &client_ctx,
-                                  const bool with_tickets)
-{
+                                  const bool with_tickets) {
   double time_client = 0;
   double time_server = 0;
 
@@ -379,7 +317,7 @@ static void test_handshake_resume(Context &server_ctx, Context &client_ctx,
     do_handshake(initial_client, initial_server);
 
     // pass some data to ensure ticket receipt
-    initial_server.write((const uint8_t *) "hello", 5);
+    initial_server.write((const uint8_t *)"hello", 5);
     initial_server.transfer_to(initial_client);
 
     uint8_t buf[5];
@@ -438,8 +376,7 @@ static void test_handshake_resume(Context &server_ctx, Context &client_ctx,
 }
 
 static void test_memory(Context &server_ctx, Context &client_ctx,
-                        size_t session_count)
-{
+                        size_t session_count) {
   std::vector<Conn> servers;
   std::vector<Conn> clients;
 
@@ -461,7 +398,7 @@ static void test_memory(Context &server_ctx, Context &client_ctx,
   }
 
   for (size_t i = 0; i < session_count; i++) {
-    uint8_t buf[1024] = { 0 };
+    uint8_t buf[1024] = {0};
     clients[i].write(buf, sizeof buf);
   }
 
@@ -472,15 +409,13 @@ static void test_memory(Context &server_ctx, Context &client_ctx,
   }
 }
 
-static int usage()
-{
+static int usage() {
   puts("usage: bench <handshake|handshake-resume|handshake-ticket> <suite>");
   puts("usage: bench bulk <suite> <plaintext-size>");
   return 1;
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
   Context server_ctx = Context::server();
   Context client_ctx = Context::client();
 
