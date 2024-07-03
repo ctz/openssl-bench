@@ -35,17 +35,17 @@ public:
   void load_server_creds() {
     int err;
     err = SSL_CTX_use_certificate_chain_file(
-        m_ctx, "../rustls/test-ca/rsa/end.fullchain");
+        m_ctx, "../rustls/test-ca/rsa-2048/end.fullchain");
     assert(err == 1);
-    err = SSL_CTX_use_PrivateKey_file(m_ctx, "../rustls/test-ca/rsa/end.key",
-                                      SSL_FILETYPE_PEM);
+    err = SSL_CTX_use_PrivateKey_file(
+        m_ctx, "../rustls/test-ca/rsa-2048/end.key", SSL_FILETYPE_PEM);
     assert(err == 1);
   }
 
   void load_client_creds() {
     int err;
-    err = SSL_CTX_load_verify_locations(m_ctx, "../rustls/test-ca/rsa/ca.cert",
-                                        NULL);
+    err = SSL_CTX_load_verify_locations(
+        m_ctx, "../rustls/test-ca/rsa-2048/ca.cert", NULL);
     assert(err == 1);
   }
 
