@@ -20,6 +20,11 @@ static bool chkerr(int err) {
   return err == 0;
 }
 
+enum class KeyType {
+  RSA2048 = 0,
+  ECDSAP256 = 1,
+};
+
 class Context {
   ssl_ctx_st *m_ctx;
 
@@ -32,20 +37,41 @@ public:
 
   ssl_st *open() { return SSL_new(m_ctx); }
 
-  void load_server_creds() {
+  void load_server_creds(const KeyType which) {
     int err;
-    err = SSL_CTX_use_certificate_chain_file(
-        m_ctx, "../rustls/test-ca/rsa-2048/end.fullchain");
-    assert(err == 1);
-    err = SSL_CTX_use_PrivateKey_file(
-        m_ctx, "../rustls/test-ca/rsa-2048/end.key", SSL_FILETYPE_PEM);
-    assert(err == 1);
+
+    switch (which) {
+    case KeyType::RSA2048:
+      err = SSL_CTX_use_certificate_chain_file(
+          m_ctx, "../rustls/test-ca/rsa-2048/end.fullchain");
+      assert(err == 1);
+      err = SSL_CTX_use_PrivateKey_file(
+          m_ctx, "../rustls/test-ca/rsa-2048/end.key", SSL_FILETYPE_PEM);
+      assert(err == 1);
+      break;
+    case KeyType::ECDSAP256:
+      err = SSL_CTX_use_certificate_chain_file(
+          m_ctx, "../rustls/test-ca/ecdsa-p256/end.fullchain");
+      assert(err == 1);
+      err = SSL_CTX_use_PrivateKey_file(
+          m_ctx, "../rustls/test-ca/ecdsa-p256/end.key", SSL_FILETYPE_PEM);
+      assert(err == 1);
+      break;
+    }
   }
 
-  void load_client_creds() {
+  void load_client_creds(const KeyType which) {
     int err;
-    err = SSL_CTX_load_verify_locations(
-        m_ctx, "../rustls/test-ca/rsa-2048/ca.cert", NULL);
+    switch (which) {
+    case KeyType::RSA2048:
+      err = SSL_CTX_load_verify_locations(
+          m_ctx, "../rustls/test-ca/rsa-2048/ca.cert", NULL);
+      break;
+    case KeyType::ECDSAP256:
+      err = SSL_CTX_load_verify_locations(
+          m_ctx, "../rustls/test-ca/ecdsa-p256/ca.cert", NULL);
+      break;
+    }
     assert(err == 1);
   }
 
@@ -410,7 +436,8 @@ static void test_memory(Context &server_ctx, Context &client_ctx,
 }
 
 static int usage() {
-  puts("usage: bench <handshake|handshake-resume|handshake-ticket> <suite>");
+  puts("usage: bench [--rsa|--ecdsa] "
+       "<handshake|handshake-resume|handshake-ticket> <suite>");
   puts("usage: bench bulk <suite> <plaintext-size>");
   return 1;
 }
@@ -423,10 +450,23 @@ int main(int argc, char **argv) {
     return usage();
   }
 
+  KeyType key_type;
+  if (strcmp(argv[1], "--rsa") == 0) {
+    key_type = KeyType::RSA2048;
+    argv += 1;
+    argc -= 1;
+  } else if (strcmp(argv[1], "--ecdsa") == 0) {
+    key_type = KeyType::ECDSAP256;
+    argv += 1;
+    argc -= 1;
+  } else {
+    key_type = KeyType::RSA2048;
+  }
+
   server_ctx.set_ciphers(argv[2]);
   client_ctx.set_ciphers(argv[2]);
-  server_ctx.load_server_creds();
-  client_ctx.load_client_creds();
+  server_ctx.load_server_creds(key_type);
+  client_ctx.load_client_creds(key_type);
 
   if (!strcmp(argv[1], "bulk") && argc == 4) {
     test_bulk(server_ctx, client_ctx, atoi(argv[3]));
