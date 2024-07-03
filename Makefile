@@ -43,4 +43,7 @@ memory: bench
 	$(ENV) $(MEMUSAGE) ./bench memory TLS_AES_256_GCM_SHA384 1000
 	$(ENV) $(MEMUSAGE) ./bench memory TLS_AES_256_GCM_SHA384 5000
 
+format: *.cc
+	clang-format -i *.cc
+
 clean:; rm -f bench *.o
