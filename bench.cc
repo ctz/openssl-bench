@@ -310,7 +310,7 @@ static void test_handshake(Context &server_ctx, Context &client_ctx) {
     time_server += get_time() - t;
 
     assert(server.accept());
-    assert(client.accept());
+    assert(client.connect());
   }
 
   printf("handshakes\tclient\t%g\thandshakes/s\n",
