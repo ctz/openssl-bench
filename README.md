@@ -16,6 +16,8 @@ The measured aspects are:
 
 The code expects a built OpenSSL tree in `../openssl/` and the rustls repository in `../rustls`.
 
+Optionally you may provide a BoringSSL tree in `../boringssl/`, and select it using `make ... BORINGSSL=1`
+
 ## Running
 
 - `make measure`: runs bulk transfer and handshake throughput benchmarks using a predefined list of
