@@ -1,9 +1,15 @@
 CXXFLAGS+=-g -Wall -Werror -O2
 
-CPPFLAGS+=-I../openssl/include
-LDFLAGS+=-L../openssl
+ifeq (,$(BORINGSSL))
+  CPPFLAGS+=-I../openssl/include
+  LDFLAGS+=-L../openssl
+  ENV=env LD_LIBRARY_PATH=../openssl
+else
+  CPPFLAGS+=-I../boringssl/include -DBORINGSSL=1
+  LDFLAGS+=-L../boringssl
+  ENV=env LD_LIBRARY_PATH=../boringssl
+endif
 LDLIBS+=-lssl -lcrypto -ldl -lpthread
-ENV=env LD_LIBRARY_PATH=../openssl
 MEMUSAGE=/usr/bin/time -f %M
 
 bench: bench.cc

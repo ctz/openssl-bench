@@ -25,6 +25,8 @@ enum class KeyType {
   ECDSAP256 = 1,
 };
 
+static int new_session_cb(SSL *ssl, SSL_SESSION *sess);
+
 class Context {
   ssl_ctx_st *m_ctx;
 
@@ -80,12 +82,36 @@ public:
     SSL_CTX_set_max_proto_version(m_ctx, maxversion);
   }
 
+  bool is_tls13() const {
+    return SSL_CTX_get_max_proto_version(m_ctx) == TLS1_3_VERSION;
+  }
+
   void set_ciphers(const char *ciphers) {
     if (!strcmp(ciphers, "TLS_AES_128_GCM_SHA256") ||
         !strcmp(ciphers, "TLS_AES_256_GCM_SHA384") ||
         !strcmp(ciphers, "TLS_CHACHA20_POLY1305_SHA256")) {
       set_version(TLS1_3_VERSION, TLS1_3_VERSION);
+#ifndef BORINGSSL
       SSL_CTX_set_ciphersuites(m_ctx, ciphers);
+#else
+      // boringssl does not have any direct way to configure TLS1.3 cipher suites.
+      // however, it does have "compliance policies" which give limited control over
+      // their order, and a configuration switch for pretending hardware-accelerated
+      // AES is absent -- which prioritises chacha.
+      //
+      // So we can arrange for one ciphersuite, as follows:
+      //
+      // - TLS_CHACHA20_POLY1305_SHA256: `SSL_CTX_set_aes_hw_override_for_testing(ctx, false)`
+      // - TLS_AES_128_GCM_SHA256: the default
+      // - TLS_AES_256_GCM_SHA384: `SSL_CTX_set_compliance_policy(ctx, ssl_compliance_policy_cnsa_202407)`
+      if (!strcmp(ciphers, "TLS_AES_256_GCM_SHA384")) {
+        SSL_CTX_set_compliance_policy(m_ctx, ssl_compliance_policy_cnsa_202407);
+      } else if (!strcmp(ciphers, "TLS_CHACHA20_POLY1305_SHA256")) {
+        bssl::SSL_CTX_set_aes_hw_override_for_testing(m_ctx, false);
+      } else {
+        assert(!strcmp(ciphers, "TLS_AES_128_GCM_SHA256"));
+      }
+#endif
     } else {
       set_version(TLS1_2_VERSION, TLS1_2_VERSION);
       SSL_CTX_set_cipher_list(m_ctx, ciphers);
@@ -93,6 +119,7 @@ public:
   }
 
   void enable_resume() {
+    SSL_CTX_sess_set_new_cb(m_ctx, new_session_cb);
     SSL_CTX_set_session_cache_mode(m_ctx, SSL_SESS_CACHE_BOTH);
     SSL_CTX_set_session_id_context(m_ctx, (const uint8_t *)"localhost",
                                    strlen("localhost"));
@@ -111,11 +138,11 @@ public:
   void dump_sess_stats() {
     printf(
         "connects: %ld, connects-good: %ld, accepts: %ld, accepts-good: %ld\n",
-        SSL_CTX_sess_connect(m_ctx), SSL_CTX_sess_connect_good(m_ctx),
-        SSL_CTX_sess_accept(m_ctx), SSL_CTX_sess_accept_good(m_ctx));
+        long(SSL_CTX_sess_connect(m_ctx)), long(SSL_CTX_sess_connect_good(m_ctx)),
+        long(SSL_CTX_sess_accept(m_ctx)), long(SSL_CTX_sess_accept_good(m_ctx)));
     printf("sessions: %ld, hits: %ld, misses: %ld\n",
-           SSL_CTX_sess_number(m_ctx), SSL_CTX_sess_hits(m_ctx),
-           SSL_CTX_sess_misses(m_ctx));
+           long(SSL_CTX_sess_number(m_ctx)), long(SSL_CTX_sess_hits(m_ctx)),
+           long(SSL_CTX_sess_misses(m_ctx)));
   }
 
   static Context server() { return Context(SSL_CTX_new(TLS_server_method())); }
@@ -127,6 +154,7 @@ class Conn {
   ssl_st *m_ssl;
   bio_st *m_reads_from;
   bio_st *m_writes_to;
+  SSL_SESSION *m_one_session;
 
   Conn(const Conn &) = delete;
   Conn &operator=(const Conn &) = delete;
@@ -134,20 +162,33 @@ class Conn {
 public:
   Conn(ssl_st *ssl)
       : m_ssl(ssl), m_reads_from(BIO_new(BIO_s_mem())),
-        m_writes_to(BIO_new(BIO_s_mem())) {
+        m_writes_to(BIO_new(BIO_s_mem())),
+        m_one_session(nullptr) {
     SSL_set0_rbio(m_ssl, m_reads_from);
     SSL_set0_wbio(m_ssl, m_writes_to);
+    SSL_set_app_data(m_ssl, this);
   }
 
   Conn(Conn &&other)
       : m_ssl(other.m_ssl), m_reads_from(other.m_reads_from),
-        m_writes_to(other.m_writes_to) {
+        m_writes_to(other.m_writes_to),
+        m_one_session(other.m_one_session) {
+    SSL_set_app_data(m_ssl, this);
     other.m_ssl = nullptr;
     other.m_reads_from = nullptr;
     other.m_writes_to = nullptr;
+    other.m_one_session = nullptr;
   }
 
-  ~Conn() { SSL_free(m_ssl); }
+  ~Conn() { SSL_SESSION_free(m_one_session); SSL_free(m_ssl); }
+
+  int save_one_session(SSL_SESSION *sess) {
+    if (m_one_session == nullptr) {
+      m_one_session = sess;
+      return 1;
+    }
+    return 0;
+  }
 
   void set_sni(const char *hostname) {
     int err;
@@ -166,6 +207,10 @@ public:
 
   SSL_SESSION *get_session() {
     ragged_close();
+    if (m_one_session) {
+      SSL_SESSION_up_ref(m_one_session);
+      return m_one_session;
+    }
     return SSL_get1_session(m_ssl);
   }
 
@@ -206,6 +251,14 @@ public:
     }
   }
 };
+
+static int new_session_cb(SSL *ssl, SSL_SESSION *sess) {
+    Conn *conn = (Conn *)SSL_get_app_data(ssl);
+    if (conn) {
+      return conn->save_one_session(sess);
+    }
+    return 0;
+  }
 
 static bool do_handshake_step(Conn &client, Conn &server) {
   bool s_connected = server.accept();
@@ -332,6 +385,13 @@ static void test_handshake_resume(Context &server_ctx, Context &client_ctx,
   if (!with_tickets) {
     server_ctx.disable_tickets();
     client_ctx.disable_tickets();
+
+#ifdef BORINGSSL
+    if (server_ctx.is_tls13()) {
+      printf("!!! BoringSSL does not support stateful resumption for TLS1.3\n");
+      return;
+    }
+#endif
   }
 
   SSL_SESSION *client_session;
