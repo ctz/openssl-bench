@@ -233,8 +233,8 @@ public:
   }
 
   void dump_cipher() {
-    printf("negotiated %s with %s\n", SSL_get_cipher_version(m_ssl),
-           SSL_get_cipher(m_ssl));
+    printf("negotiated %s with %s kx %s\n", SSL_get_cipher_version(m_ssl),
+           SSL_get_cipher(m_ssl), OBJ_nid2ln(SSL_get_negotiated_group(m_ssl)));
   }
 
   void write(const uint8_t *buf, size_t n) {
