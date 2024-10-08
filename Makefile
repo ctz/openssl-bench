@@ -5,6 +5,8 @@ ifeq (,$(BORINGSSL))
   LDFLAGS+=-L../openssl
   ENV=env LD_LIBRARY_PATH=../openssl
 else
+  CC=clang
+  CXX=clang++
   CPPFLAGS+=-I../boringssl/include -DBORINGSSL=1
   LDFLAGS+=-L../boringssl
   ENV=env LD_LIBRARY_PATH=../boringssl
