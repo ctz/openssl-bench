@@ -251,9 +251,7 @@ public:
           new_bytes = true;
         }
 
-        for (int i = 0; i < err; i++) {
-          other.m_read_buffer.push_back(buf[i]);
-        }
+        other.m_read_buffer.insert(other.m_read_buffer.end(), buf, buf + err);
       }
     }
 
