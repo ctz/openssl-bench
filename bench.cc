@@ -11,7 +11,7 @@
 #include <vector>
 
 static bool chkerr(int err) {
-  if (err == SSL_ERROR_SYSCALL) {
+  if (err == SSL_ERROR_SYSCALL || err == SSL_ERROR_SSL) {
     ERR_print_errors_fp(stdout);
     puts("error");
     exit(1);
@@ -156,28 +156,30 @@ public:
 
 class Conn {
   ssl_st *m_ssl;
-  bio_st *m_reads_from;
-  bio_st *m_writes_to;
-  SSL_SESSION *m_one_session;
+  std::vector<uint8_t> m_read_buffer; // borrowed by m_reads_from, thence m_ssl
+  bio_st *m_reads_from;               // owned by m_ssl
+  bio_st *m_writes_to;                // owned by m_ssl
+  SSL_SESSION *m_one_session;         // maybe null, owned by us
 
   Conn(const Conn &) = delete;
   Conn &operator=(const Conn &) = delete;
 
 public:
   Conn(ssl_st *ssl)
-      : m_ssl(ssl), m_reads_from(BIO_new(BIO_s_mem())),
-        m_writes_to(BIO_new(BIO_s_mem())), m_one_session(nullptr) {
-    SSL_set0_rbio(m_ssl, m_reads_from);
+      : m_ssl(ssl), m_reads_from(nullptr), m_writes_to(BIO_new(BIO_s_mem())),
+        m_one_session(nullptr) {
+    install_read_bio();
     SSL_set0_wbio(m_ssl, m_writes_to);
     SSL_set_app_data(m_ssl, this);
   }
 
   Conn(Conn &&other)
-      : m_ssl(other.m_ssl), m_reads_from(other.m_reads_from),
+      : m_ssl(other.m_ssl), m_reads_from(nullptr),
         m_writes_to(other.m_writes_to), m_one_session(other.m_one_session) {
     SSL_set_app_data(m_ssl, this);
     other.m_ssl = nullptr;
-    other.m_reads_from = nullptr;
+    m_read_buffer.swap(other.m_read_buffer);
+    install_read_bio();
     other.m_writes_to = nullptr;
     other.m_one_session = nullptr;
   }
@@ -185,6 +187,16 @@ public:
   ~Conn() {
     SSL_SESSION_free(m_one_session);
     SSL_free(m_ssl);
+  }
+
+  void install_read_bio() {
+    static uint8_t empty_buf[0] = {};
+    m_reads_from =
+        BIO_new_mem_buf(m_read_buffer.data() ? m_read_buffer.data() : empty_buf,
+                        m_read_buffer.size());
+    assert(m_reads_from != nullptr);
+    BIO_set_mem_eof_return(m_reads_from, -1);
+    SSL_set0_rbio(m_ssl, m_reads_from); // frees previous m_reads_from
   }
 
   int save_one_session(SSL_SESSION *sess) {
@@ -226,15 +238,39 @@ public:
   void transfer_to(Conn &other) {
     uint8_t buf[262144] = {0};
 
+    bool new_bytes = false;
+
     while (true) {
       int err = BIO_read(m_writes_to, buf, sizeof(buf));
 
       if (err == 0 || err == -1) {
         break;
       } else if (err > 0) {
-        BIO_write(other.m_reads_from, buf, err);
+        if (!new_bytes) {
+          other.drop_read_bytes();
+          new_bytes = true;
+        }
+
+        for (int i = 0; i < err; i++) {
+          other.m_read_buffer.push_back(buf[i]);
+        }
       }
     }
+
+    if (new_bytes) {
+      other.install_read_bio();
+    }
+  }
+
+  void drop_read_bytes() {
+    // eliminate processed bytes from read buffer
+    char *old_buf = nullptr;
+    long old_len = BIO_get_mem_data(m_reads_from, &old_buf);
+    long consumed = m_read_buffer.size() - old_len;
+    m_read_buffer.erase(m_read_buffer.begin(),
+                        m_read_buffer.begin() + consumed);
+    // caller _MUST_ now call install_read_bio() prior to touching
+    // m_ssl
   }
 
   void dump_cipher() {
