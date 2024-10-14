@@ -94,16 +94,18 @@ public:
 #ifndef BORINGSSL
       SSL_CTX_set_ciphersuites(m_ctx, ciphers);
 #else
-      // boringssl does not have any direct way to configure TLS1.3 cipher suites.
-      // however, it does have "compliance policies" which give limited control over
-      // their order, and a configuration switch for pretending hardware-accelerated
-      // AES is absent -- which prioritises chacha.
+      // boringssl does not have any direct way to configure TLS1.3 cipher
+      // suites. however, it does have "compliance policies" which give limited
+      // control over their order, and a configuration switch for pretending
+      // hardware-accelerated AES is absent -- which prioritises chacha.
       //
       // So we can arrange for one ciphersuite, as follows:
       //
-      // - TLS_CHACHA20_POLY1305_SHA256: `SSL_CTX_set_aes_hw_override_for_testing(ctx, false)`
+      // - TLS_CHACHA20_POLY1305_SHA256:
+      // `SSL_CTX_set_aes_hw_override_for_testing(ctx, false)`
       // - TLS_AES_128_GCM_SHA256: the default
-      // - TLS_AES_256_GCM_SHA384: `SSL_CTX_set_compliance_policy(ctx, ssl_compliance_policy_cnsa_202407)`
+      // - TLS_AES_256_GCM_SHA384: `SSL_CTX_set_compliance_policy(ctx,
+      // ssl_compliance_policy_cnsa_202407)`
       if (!strcmp(ciphers, "TLS_AES_256_GCM_SHA384")) {
         SSL_CTX_set_compliance_policy(m_ctx, ssl_compliance_policy_cnsa_202407);
       } else if (!strcmp(ciphers, "TLS_CHACHA20_POLY1305_SHA256")) {
@@ -138,8 +140,10 @@ public:
   void dump_sess_stats() {
     printf(
         "connects: %ld, connects-good: %ld, accepts: %ld, accepts-good: %ld\n",
-        long(SSL_CTX_sess_connect(m_ctx)), long(SSL_CTX_sess_connect_good(m_ctx)),
-        long(SSL_CTX_sess_accept(m_ctx)), long(SSL_CTX_sess_accept_good(m_ctx)));
+        long(SSL_CTX_sess_connect(m_ctx)),
+        long(SSL_CTX_sess_connect_good(m_ctx)),
+        long(SSL_CTX_sess_accept(m_ctx)),
+        long(SSL_CTX_sess_accept_good(m_ctx)));
     printf("sessions: %ld, hits: %ld, misses: %ld\n",
            long(SSL_CTX_sess_number(m_ctx)), long(SSL_CTX_sess_hits(m_ctx)),
            long(SSL_CTX_sess_misses(m_ctx)));
@@ -162,8 +166,7 @@ class Conn {
 public:
   Conn(ssl_st *ssl)
       : m_ssl(ssl), m_reads_from(BIO_new(BIO_s_mem())),
-        m_writes_to(BIO_new(BIO_s_mem())),
-        m_one_session(nullptr) {
+        m_writes_to(BIO_new(BIO_s_mem())), m_one_session(nullptr) {
     SSL_set0_rbio(m_ssl, m_reads_from);
     SSL_set0_wbio(m_ssl, m_writes_to);
     SSL_set_app_data(m_ssl, this);
@@ -171,8 +174,7 @@ public:
 
   Conn(Conn &&other)
       : m_ssl(other.m_ssl), m_reads_from(other.m_reads_from),
-        m_writes_to(other.m_writes_to),
-        m_one_session(other.m_one_session) {
+        m_writes_to(other.m_writes_to), m_one_session(other.m_one_session) {
     SSL_set_app_data(m_ssl, this);
     other.m_ssl = nullptr;
     other.m_reads_from = nullptr;
@@ -180,7 +182,10 @@ public:
     other.m_one_session = nullptr;
   }
 
-  ~Conn() { SSL_SESSION_free(m_one_session); SSL_free(m_ssl); }
+  ~Conn() {
+    SSL_SESSION_free(m_one_session);
+    SSL_free(m_ssl);
+  }
 
   int save_one_session(SSL_SESSION *sess) {
     if (m_one_session == nullptr) {
@@ -253,12 +258,12 @@ public:
 };
 
 static int new_session_cb(SSL *ssl, SSL_SESSION *sess) {
-    Conn *conn = (Conn *)SSL_get_app_data(ssl);
-    if (conn) {
-      return conn->save_one_session(sess);
-    }
-    return 0;
+  Conn *conn = (Conn *)SSL_get_app_data(ssl);
+  if (conn) {
+    return conn->save_one_session(sess);
   }
+  return 0;
+}
 
 static bool do_handshake_step(Conn &client, Conn &server) {
   bool s_connected = server.accept();
