@@ -1,4 +1,4 @@
-CXXFLAGS+=-g -Wall -Werror -O2
+CXXFLAGS+=-g -Wall -Werror -O3
 
 ifeq (,$(BORINGSSL))
   CPPFLAGS+=-I../openssl/include
