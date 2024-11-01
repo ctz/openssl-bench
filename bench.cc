@@ -8,6 +8,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <atomic>
+#include <string>
+#include <thread>
 #include <vector>
 
 static bool chkerr(int err) {
@@ -231,6 +234,8 @@ public:
     return SSL_get1_session(m_ssl);
   }
 
+  bool was_resumed() { return SSL_session_reused(m_ssl) == 1; }
+
   bool connect() { return chkerr(SSL_get_error(m_ssl, SSL_connect(m_ssl))); }
 
   bool accept() { return chkerr(SSL_get_error(m_ssl, SSL_accept(m_ssl))); }
@@ -271,9 +276,12 @@ public:
     // m_ssl
   }
 
-  void dump_cipher() {
-    printf("negotiated %s with %s kx %s\n", SSL_get_cipher_version(m_ssl),
-           SSL_get_cipher(m_ssl), OBJ_nid2ln(SSL_get_negotiated_group(m_ssl)));
+  std::string get_cipher_string() {
+    std::string r;
+    r += SSL_get_cipher_version(m_ssl);
+    r += '\t';
+    r += SSL_get_cipher(m_ssl);
+    return r;
   }
 
   void write(const uint8_t *buf, size_t n) {
@@ -336,20 +344,32 @@ static double get_time() {
   return v;
 }
 
-static void test_bulk(Context &server_ctx, Context &client_ctx,
-                      const size_t plaintext_size) {
+struct Timings {
+  std::atomic<double> client;
+  std::atomic<double> server;
+
+  Timings() : client(0.), server(0.) {}
+};
+
+static size_t rounds_for_bulk_test(const size_t plaintext_size) {
+
+  const size_t total_data = apply_work_multiplier(
+      plaintext_size < 8192 ? (64 * 1024 * 1024) : (1024 * 1024 * 1024));
+  const size_t rounds = total_data / plaintext_size;
+  return rounds;
+}
+
+static void test_bulk_one(Timings &timings_out, Context &server_ctx,
+                          Context &client_ctx, const size_t rounds,
+                          const size_t plaintext_size) {
   Conn server(server_ctx.open());
   Conn client(client_ctx.open());
 
   do_handshake(client, server);
-  client.dump_cipher();
 
   std::vector<uint8_t> plaintext(plaintext_size, 0);
   double time_send = 0;
   double time_recv = 0;
-  const size_t total_data = apply_work_multiplier(
-      plaintext_size < 8192 ? (64 * 1024 * 1024) : (1024 * 1024 * 1024));
-  const size_t rounds = total_data / plaintext_size;
 
   for (size_t i = 0; i < rounds; i++) {
     double t = get_time();
@@ -362,16 +382,77 @@ static void test_bulk(Context &server_ctx, Context &client_ctx,
     time_recv += get_time() - t;
   }
 
-  const double total_mbs = (plaintext_size * rounds) / (1024. * 1024.);
-  printf("send: %g MB/s\n", total_mbs / time_send);
-  printf("recv: %g MB/s\n", total_mbs / time_recv);
+  timings_out.server.store(time_send);
+  timings_out.client.store(time_recv);
 }
 
-static void test_handshake(Context &server_ctx, Context &client_ctx) {
+static void print_results(const char *server, const char *client,
+                          const std::vector<Timings> &thread_timings,
+                          const double thread_work, const char *units) {
+  const size_t n_threads = thread_timings.size();
+  if (n_threads > 1) {
+    printf("%s\tthreads\t%zu\t", server, n_threads);
+    double total_server = 0.;
+
+    for (unsigned i = 0; i < n_threads; i++) {
+      const double server = thread_work / thread_timings[i].server.load();
+      total_server += server;
+      printf("%g\t", server);
+    }
+    printf("total\t%g\tper-thread\t%g\t%s\n", total_server,
+           total_server / n_threads, units);
+    printf("%s\tthreads\t%zu\t", client, n_threads);
+    double total_client = 0.;
+
+    for (unsigned i = 0; i < n_threads; i++) {
+      const double client = thread_work / thread_timings[i].client.load();
+      total_client += client;
+      printf("%g\t", client);
+    }
+    printf("total\t%g\tper-thread\t%g\t%s\n", total_client,
+           total_client / n_threads, units);
+  } else {
+    printf("%s\t%g\t%s\n", server,
+           thread_work / thread_timings[0].server.load(), units);
+    printf("%s\t%g\t%s\n", client,
+           thread_work / thread_timings[0].client.load(), units);
+  }
+}
+
+static void test_bulk(const unsigned n_threads, Context &server_ctx,
+                      Context &client_ctx, const size_t plaintext_size) {
+
+  std::vector<std::thread> threads;
+  std::vector<Timings> results(n_threads);
+  const size_t rounds = rounds_for_bulk_test(plaintext_size);
+
+  for (unsigned i = 0; i < n_threads; i++) {
+    threads.push_back(std::thread(&test_bulk_one, std::ref(results[i]),
+                                  std::ref(server_ctx), std::ref(client_ctx),
+                                  rounds, plaintext_size));
+  }
+
+  for (unsigned i = 0; i < n_threads; i++) {
+    threads[i].join();
+  }
+
+  Conn client(client_ctx.open());
+  Conn server(server_ctx.open());
+  do_handshake(client, server);
+  std::string prefix_send = "bulk\tsend\t";
+  std::string prefix_recv = "bulk\trecv\t";
+  prefix_send += client.get_cipher_string();
+  prefix_recv += client.get_cipher_string();
+
+  const double total_mbs = (plaintext_size * rounds) / (1024. * 1024.);
+  print_results(prefix_send.c_str(), prefix_recv.c_str(), results, total_mbs,
+                "MB/s");
+}
+
+static void test_handshake_one(Timings &timings_out, const unsigned handshakes,
+                               Context &server_ctx, Context &client_ctx) {
   double time_client = 0;
   double time_server = 0;
-
-  const size_t handshakes = apply_work_multiplier(512);
 
   for (size_t i = 0; i < handshakes; i++) {
     Conn server(server_ctx.open());
@@ -403,58 +484,48 @@ static void test_handshake(Context &server_ctx, Context &client_ctx) {
 
     assert(server.accept());
     assert(client.connect());
+    assert(!server.was_resumed());
+    assert(!client.was_resumed());
   }
 
-  printf("handshakes\tclient\t%g\thandshakes/s\n",
-         double(handshakes) / time_client);
-  printf("handshakes\tserver\t%g\thandshakes/s\n",
-         double(handshakes) / time_server);
+  timings_out.client.store(time_client);
+  timings_out.server.store(time_server);
 }
 
-static void test_handshake_resume(Context &server_ctx, Context &client_ctx,
-                                  const bool with_tickets) {
+static void test_handshake(const unsigned n_threads, Context &server_ctx,
+                           Context &client_ctx) {
+  std::vector<std::thread> threads;
+  std::vector<Timings> results(n_threads);
+  const size_t handshakes = apply_work_multiplier(512);
+
+  for (unsigned i = 0; i < n_threads; i++) {
+    threads.push_back(std::thread(&test_handshake_one, std::ref(results[i]),
+                                  handshakes, std::ref(server_ctx),
+                                  std::ref(client_ctx)));
+  }
+
+  for (unsigned i = 0; i < n_threads; i++) {
+    threads[i].join();
+  }
+
+  Conn client(client_ctx.open());
+  Conn server(server_ctx.open());
+  do_handshake(client, server);
+  std::string prefix_server = "handshakes\tserver\t";
+  std::string prefix_client = "handshakes\tclient\t";
+  prefix_server += client.get_cipher_string();
+  prefix_client += client.get_cipher_string();
+
+  print_results(prefix_server.c_str(), prefix_client.c_str(), results,
+                handshakes, "handshakes/s");
+}
+
+static void test_handshake_resume_one(Timings &timings_out, Context &server_ctx,
+                                      Context &client_ctx,
+                                      SSL_SESSION *client_session,
+                                      const size_t handshakes) {
   double time_client = 0;
   double time_server = 0;
-
-  const size_t handshakes = apply_work_multiplier(4096);
-
-  server_ctx.enable_resume();
-  client_ctx.enable_resume();
-
-  if (!with_tickets) {
-    server_ctx.disable_tickets();
-    client_ctx.disable_tickets();
-
-#ifdef BORINGSSL
-    if (server_ctx.is_tls13()) {
-      printf("!!! BoringSSL does not support stateful resumption for TLS1.3\n");
-      return;
-    }
-#endif
-  }
-
-  SSL_SESSION *client_session;
-
-  {
-    Conn initial_server(server_ctx.open());
-    Conn initial_client(client_ctx.open());
-    initial_client.set_sni("localhost");
-    do_handshake(initial_client, initial_server);
-
-    // pass some data to ensure ticket receipt
-    initial_server.write((const uint8_t *)"hello", 5);
-    initial_server.transfer_to(initial_client);
-
-    uint8_t buf[5];
-    initial_client.read(buf, 5);
-
-    client_session = initial_client.get_session();
-    assert(SSL_SESSION_is_resumable(client_session));
-    initial_client.dump_cipher();
-    initial_server.ragged_close();
-  }
-
-  client_ctx.bodge_disable_resume();
 
   for (size_t i = 0; i < handshakes; i++) {
     Conn server(server_ctx.open());
@@ -488,16 +559,84 @@ static void test_handshake_resume(Context &server_ctx, Context &client_ctx,
 
     assert(server.accept());
     assert(client.connect());
+    assert(server.was_resumed());
+    assert(client.was_resumed());
     server.ragged_close();
     client.ragged_close();
   }
 
-  server_ctx.dump_sess_stats();
+  timings_out.client.store(time_client);
+  timings_out.server.store(time_server);
+}
 
-  printf("handshakes\tclient\t%g\thandshakes/s\n",
-         double(handshakes) / time_client);
-  printf("handshakes\tserver\t%g\thandshakes/s\n",
-         double(handshakes) / time_server);
+static void test_handshake_resume(const unsigned n_threads, Context &server_ctx,
+                                  Context &client_ctx,
+                                  const bool with_tickets) {
+  const size_t handshakes = apply_work_multiplier(4096);
+
+  server_ctx.enable_resume();
+  client_ctx.enable_resume();
+
+  std::string prefix_server, prefix_client;
+
+  if (!with_tickets) {
+    server_ctx.disable_tickets();
+    client_ctx.disable_tickets();
+    prefix_server = "handshake-resume\tserver\t";
+    prefix_client = "handshake-resume\tclient\t";
+
+#ifdef BORINGSSL
+    if (server_ctx.is_tls13()) {
+      printf("!!! BoringSSL does not support stateful resumption for TLS1.3\n");
+      return;
+    }
+#endif
+  } else {
+    prefix_server = "handshake-ticket\tserver\t";
+    prefix_client = "handshake-ticket\tclient\t";
+  }
+
+  SSL_SESSION *client_session;
+
+  {
+    Conn initial_server(server_ctx.open());
+    Conn initial_client(client_ctx.open());
+    initial_client.set_sni("localhost");
+    do_handshake(initial_client, initial_server);
+
+    // pass some data to ensure ticket receipt
+    initial_server.write((const uint8_t *)"hello", 5);
+    initial_server.transfer_to(initial_client);
+
+    uint8_t buf[5];
+    initial_client.read(buf, 5);
+
+    client_session = initial_client.get_session();
+    assert(SSL_SESSION_is_resumable(client_session));
+    initial_server.ragged_close();
+
+    prefix_server += initial_client.get_cipher_string();
+    prefix_client += initial_client.get_cipher_string();
+  }
+
+  client_ctx.bodge_disable_resume();
+
+  std::vector<std::thread> threads;
+  std::vector<Timings> results(n_threads);
+
+  for (unsigned i = 0; i < n_threads; i++) {
+    threads.push_back(std::thread(
+        &test_handshake_resume_one, std::ref(results[i]), std::ref(server_ctx),
+        std::ref(client_ctx), client_session, handshakes));
+  }
+
+  for (unsigned i = 0; i < n_threads; i++) {
+    threads[i].join();
+  }
+
+  server_ctx.dump_sess_stats();
+  print_results(prefix_server.c_str(), prefix_client.c_str(), results,
+                handshakes, "handshakes/s");
 }
 
 static void test_memory(Context &server_ctx, Context &client_ctx,
@@ -535,9 +674,10 @@ static void test_memory(Context &server_ctx, Context &client_ctx,
 }
 
 static int usage() {
-  puts("usage: bench [--rsa|--ecdsa] "
+  puts("usage: bench [--threads N] [--rsa|--ecdsa] "
        "<handshake|handshake-resume|handshake-ticket> <suite>");
-  puts("usage: bench bulk <suite> <plaintext-size>");
+  puts("usage: bench [--threads N] bulk <suite> <plaintext-size>");
+  puts("usage: bench memory <count>");
   return 1;
 }
 
@@ -545,16 +685,30 @@ int main(int argc, char **argv) {
   Context server_ctx = Context::server();
   Context client_ctx = Context::client();
 
-  if (argc < 3) {
+  argv += 1;
+  argc -= 1;
+
+  if (argc < 2) {
     return usage();
   }
 
+  unsigned n_threads = 1;
+  if (strcmp(argv[0], "--threads") == 0) {
+    n_threads = unsigned(atoi(argv[1]));
+    argv += 2;
+    argc -= 2;
+    if (n_threads == 0) {
+      puts("bad --threads count");
+      return usage();
+    }
+  }
+
   KeyType key_type;
-  if (strcmp(argv[1], "--rsa") == 0) {
+  if (strcmp(argv[0], "--rsa") == 0) {
     key_type = KeyType::RSA2048;
     argv += 1;
     argc -= 1;
-  } else if (strcmp(argv[1], "--ecdsa") == 0) {
+  } else if (strcmp(argv[0], "--ecdsa") == 0) {
     key_type = KeyType::ECDSAP256;
     argv += 1;
     argc -= 1;
@@ -562,21 +716,25 @@ int main(int argc, char **argv) {
     key_type = KeyType::RSA2048;
   }
 
-  server_ctx.set_ciphers(argv[2]);
-  client_ctx.set_ciphers(argv[2]);
+  if (argc < 2) {
+    return usage();
+  }
+
+  server_ctx.set_ciphers(argv[1]);
+  client_ctx.set_ciphers(argv[1]);
   server_ctx.load_server_creds(key_type);
   client_ctx.load_client_creds(key_type);
 
-  if (!strcmp(argv[1], "bulk") && argc == 4) {
-    test_bulk(server_ctx, client_ctx, atoi(argv[3]));
-  } else if (!strcmp(argv[1], "handshake")) {
-    test_handshake(server_ctx, client_ctx);
-  } else if (!strcmp(argv[1], "handshake-resume")) {
-    test_handshake_resume(server_ctx, client_ctx, false);
-  } else if (!strcmp(argv[1], "handshake-ticket")) {
-    test_handshake_resume(server_ctx, client_ctx, true);
-  } else if (!strcmp(argv[1], "memory")) {
-    test_memory(server_ctx, client_ctx, atoi(argv[3]));
+  if (!strcmp(argv[0], "bulk") && argc == 3) {
+    test_bulk(n_threads, server_ctx, client_ctx, atoi(argv[2]));
+  } else if (!strcmp(argv[0], "handshake")) {
+    test_handshake(n_threads, server_ctx, client_ctx);
+  } else if (!strcmp(argv[0], "handshake-resume")) {
+    test_handshake_resume(n_threads, server_ctx, client_ctx, false);
+  } else if (!strcmp(argv[0], "handshake-ticket")) {
+    test_handshake_resume(n_threads, server_ctx, client_ctx, true);
+  } else if (!strcmp(argv[0], "memory")) {
+    test_memory(server_ctx, client_ctx, atoi(argv[2]));
   } else {
     return usage();
   }
