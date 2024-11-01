@@ -61,6 +61,17 @@ memory: bench
 	$(ENV) $(MEMUSAGE) ./bench memory TLS_AES_256_GCM_SHA384 1000
 	$(ENV) $(MEMUSAGE) ./bench memory TLS_AES_256_GCM_SHA384 5000
 
+threads: bench
+	for thr in $(shell ../rustls/admin/threads-seq.rs) ; do \
+	  $(ENV) ./bench --threads $$thr handshake ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  $(ENV) ./bench --threads $$thr handshake-resume ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  $(ENV) ./bench --threads $$thr handshake-ticket ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  $(ENV) ./bench --threads $$thr handshake TLS_AES_256_GCM_SHA384 ; \
+	  $(ENV) ./bench --threads $$thr handshake-ticket TLS_AES_256_GCM_SHA384 ; \
+	  $(ENV) ./bench --threads $$thr bulk ECDHE-RSA-AES256-GCM-SHA384 1048576 ; \
+	  $(ENV) ./bench --threads $$thr bulk TLS_AES_256_GCM_SHA384 1048576 ; \
+	done
+
 format: *.cc
 	clang-format -i *.cc
 

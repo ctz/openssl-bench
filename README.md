@@ -23,6 +23,8 @@ Optionally you may provide a BoringSSL tree in `../boringssl/`, and select it us
 - `make measure`: runs bulk transfer and handshake throughput benchmarks using a predefined list of
   cipher suites.
 - `make memory`: measures memory usage for different amounts of connections.
+- `make threads`: measures bulk transfer and handshake throughput benchmarks over a range of
+  concurrency levels.
 
 We usually extend the duration of the benchmarks in an attempt to neutralize the effect of cold CPU
 and page caches, giving us more accurate results. This is done through the `BENCH_MULTIPLIER`
