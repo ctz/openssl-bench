@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include <atomic>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -351,6 +352,38 @@ struct Timings {
   Timings() : client(0.), server(0.) {}
 };
 
+class LatencyOutput {
+  FILE *m_output;
+
+public:
+  LatencyOutput(const char *which) : m_output(nullptr) {
+    const char *file_prefix = getenv("BENCH_LATENCY");
+    if (file_prefix) {
+      std::ostringstream thread_id;
+      thread_id << std::this_thread::get_id();
+      char filename[128] = {0};
+      snprintf(filename, sizeof(filename), "%s-%s-%s-latency.tsv", file_prefix,
+               which, thread_id.str().c_str());
+      m_output = fopen(filename, "w+");
+    }
+  }
+
+  ~LatencyOutput() {
+    if (m_output) {
+      fclose(m_output);
+      m_output = nullptr;
+    }
+  }
+
+  void sample(double t) {
+    if (!m_output) {
+      return;
+    }
+
+    fprintf(m_output, "%.8f\t%.8f\n", get_time(), t * 1e6);
+  }
+};
+
 static size_t rounds_for_bulk_test(const size_t plaintext_size) {
 
   const size_t total_data = apply_work_multiplier(
@@ -454,33 +487,41 @@ static void test_handshake_one(Timings &timings_out, const unsigned handshakes,
   double time_client = 0;
   double time_server = 0;
 
+  LatencyOutput client_latency("client");
+  LatencyOutput server_latency("server");
+
   for (size_t i = 0; i < handshakes; i++) {
     Conn server(server_ctx.open());
     Conn client(client_ctx.open());
 
     client.set_sni("localhost");
 
-    double t;
+    double t, time_client_one = 0, time_server_one = 0;
 
     t = get_time();
     client.connect();
     client.transfer_to(server);
-    time_client += get_time() - t;
+    time_client_one += get_time() - t;
 
     t = get_time();
     server.accept();
     server.transfer_to(client);
-    time_server += get_time() - t;
+    time_server_one += get_time() - t;
 
     t = get_time();
     client.connect();
     client.transfer_to(server);
-    time_client += get_time() - t;
+    time_client_one += get_time() - t;
 
     t = get_time();
     server.accept();
     server.transfer_to(client);
-    time_server += get_time() - t;
+    time_server_one += get_time() - t;
+
+    client_latency.sample(time_client_one);
+    server_latency.sample(time_server_one);
+    time_client += time_client_one;
+    time_server += time_server_one;
 
     assert(server.accept());
     assert(client.connect());
@@ -527,6 +568,9 @@ static void test_handshake_resume_one(Timings &timings_out, Context &server_ctx,
   double time_client = 0;
   double time_server = 0;
 
+  LatencyOutput client_latency("client");
+  LatencyOutput server_latency("server");
+
   for (size_t i = 0; i < handshakes; i++) {
     Conn server(server_ctx.open());
     Conn client(client_ctx.open());
@@ -535,27 +579,27 @@ static void test_handshake_resume_one(Timings &timings_out, Context &server_ctx,
     client.set_session(client_session);
     assert(SSL_SESSION_is_resumable(client_session));
 
-    double t;
+    double t, time_client_one = 0, time_server_one = 0;
 
     t = get_time();
     client.connect();
     client.transfer_to(server);
-    time_client += get_time() - t;
+    time_client_one += get_time() - t;
 
     t = get_time();
     server.accept();
     server.transfer_to(client);
-    time_server += get_time() - t;
+    time_server_one += get_time() - t;
 
     t = get_time();
     client.connect();
     client.transfer_to(server);
-    time_client += get_time() - t;
+    time_client_one += get_time() - t;
 
     t = get_time();
     server.accept();
     server.transfer_to(client);
-    time_server += get_time() - t;
+    time_server_one += get_time() - t;
 
     assert(server.accept());
     assert(client.connect());
@@ -563,6 +607,11 @@ static void test_handshake_resume_one(Timings &timings_out, Context &server_ctx,
     assert(client.was_resumed());
     server.ragged_close();
     client.ragged_close();
+
+    client_latency.sample(time_client_one);
+    server_latency.sample(time_server_one);
+    time_client += time_client_one;
+    time_server += time_server_one;
   }
 
   timings_out.client.store(time_client);
