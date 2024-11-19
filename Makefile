@@ -72,6 +72,16 @@ threads: bench
 	  $(ENV) ./bench --threads $$thr bulk TLS_AES_256_GCM_SHA384 1048576 ; \
 	done
 
+thread-latency: bench
+	$(ENV) BENCH_LATENCY=latency-fullhs-tls12 ./bench --threads $$(nproc) handshake ECDHE-RSA-AES256-GCM-SHA384
+	$(ENV) BENCH_LATENCY=latency-fullhs-tls13 ./bench --threads $$(nproc) handshake TLS_AES_256_GCM_SHA384
+	$(ENV) BENCH_LATENCY=latency-resume-tls12 ./bench --threads $$(nproc) handshake-resume ECDHE-RSA-AES256-GCM-SHA384
+	$(ENV) BENCH_LATENCY=latency-resume-tls13 ./bench --threads $$(nproc) handshake-ticket TLS_AES_256_GCM_SHA384
+	cat latency-fullhs-tls12-server-*.tsv > latency-fullhs-tls12-server.tsv
+	cat latency-fullhs-tls13-server-*.tsv > latency-fullhs-tls13-server.tsv
+	cat latency-resume-tls12-server-*.tsv > latency-resume-tls12-server.tsv
+	cat latency-resume-tls13-server-*.tsv > latency-resume-tls13-server.tsv
+
 format: *.cc
 	clang-format -i *.cc
 
