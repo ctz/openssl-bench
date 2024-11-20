@@ -1,6 +1,8 @@
 CXXFLAGS+=-g -Wall -Werror -O3
 
-ifeq (,$(BORINGSSL))
+ifeq (1,$(HOST_OPENSSL))
+  ENV=env
+else ifeq (,$(BORINGSSL))
   CPPFLAGS+=-I../openssl/include
   LDFLAGS+=-L../openssl
   ENV=env LD_LIBRARY_PATH=../openssl
