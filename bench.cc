@@ -288,6 +288,19 @@ public:
     return r;
   }
 
+  void show_kx() {
+    printf("negotiated v=%s cs=%s kx=%s\n", SSL_get_cipher_version(m_ssl),
+           SSL_get_cipher(m_ssl),
+#ifdef BORINGSSL
+           OBJ_nid2ln(SSL_get_negotiated_group(m_ssl))
+#else
+           // OpenSSL 3.5.0 broke the working of OBJ_nid2ln by not registering
+           // NIDs for built-in groups.
+           SSL_group_to_name(m_ssl, SSL_get_negotiated_group(m_ssl))
+#endif
+    );
+  }
+
   void write(const uint8_t *buf, size_t n) {
     chkerr(SSL_get_error(m_ssl, SSL_write(m_ssl, buf, n)));
   }
@@ -663,6 +676,7 @@ static void test_handshake_resume(const unsigned n_threads, Context &server_ctx,
     uint8_t buf[5];
     initial_client.read(buf, 5);
 
+    initial_client.show_kx();
     client_session = initial_client.get_session();
     assert(SSL_SESSION_is_resumable(client_session));
     initial_server.ragged_close();
