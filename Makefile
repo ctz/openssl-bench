@@ -1,4 +1,4 @@
-CXXFLAGS+=-g -Wall -Werror -O3
+CXXFLAGS+=-g -Wall -Werror -O3 -std=c++17
 
 ifeq (1,$(HOST_OPENSSL))
   ENV=env
