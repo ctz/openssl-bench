@@ -94,6 +94,9 @@ public:
     if (!strcmp(ciphers, "TLS_AES_128_GCM_SHA256") ||
         !strcmp(ciphers, "TLS_AES_256_GCM_SHA384") ||
         !strcmp(ciphers, "TLS_CHACHA20_POLY1305_SHA256")) {
+      int err =
+          SSL_CTX_set1_groups_list(m_ctx, "X25519MLKEM768:X25519:P-256:P-384");
+      assert(err == 1);
       set_version(TLS1_3_VERSION, TLS1_3_VERSION);
 #ifndef BORINGSSL
       SSL_CTX_set_ciphersuites(m_ctx, ciphers);
