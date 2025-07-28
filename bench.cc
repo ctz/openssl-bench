@@ -132,6 +132,7 @@ public:
     SSL_CTX_set_session_cache_mode(m_ctx, SSL_SESS_CACHE_BOTH);
     SSL_CTX_set_session_id_context(m_ctx, (const uint8_t *)"localhost",
                                    strlen("localhost"));
+    SSL_CTX_sess_set_cache_size(m_ctx, 1024 * 1024);
   }
 
   void bodge_disable_resume() {
