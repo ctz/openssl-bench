@@ -1,3 +1,7 @@
+#ifdef WITH_WOLFSSL
+#include <wolfssl/options.h>
+#include <wolfssl/ssl.h>
+#endif
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -13,6 +17,44 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#ifdef WITH_LIBRESSL
+#ifdef DEBUG
+static void
+apps_ssl_info_callback(const SSL *s, int where, int ret)
+{
+      const char *str;
+      int w;
+
+      w = where & ~SSL_ST_MASK;
+
+      if (w & SSL_ST_CONNECT)
+              str = "SSL_connect";
+      else if (w & SSL_ST_ACCEPT)
+              str = "SSL_accept";
+      else
+              str = "undefined";
+
+      if (where & SSL_CB_LOOP) {
+              fprintf(stderr, "%s:%s\n", str,
+                  SSL_state_string_long(s));
+      } else if (where & SSL_CB_ALERT) {
+              str = (where & SSL_CB_READ) ? "read" : "write";
+              fprintf(stderr, "SSL3 alert %s:%s:%s\n", str,
+                      SSL_alert_type_string_long(ret),
+                      SSL_alert_desc_string_long(ret));
+      } else if (where & SSL_CB_EXIT) {
+              if (ret == 0)
+                      fprintf(stderr, "%s:failed in %s\n",
+                              str, SSL_state_string_long(s));
+              else if (ret < 0) {
+                      fprintf(stderr, "%s:error in %s (%d)\n",
+                              str, SSL_state_string_long(s), ret);
+              }
+      }
+}
+#endif
+#endif
 
 static bool chkerr(int err) {
   if (err == SSL_ERROR_SYSCALL || err == SSL_ERROR_SSL) {
@@ -31,6 +73,12 @@ enum class KeyType {
 
 static int new_session_cb(SSL *ssl, SSL_SESSION *sess);
 
+#ifdef WITH_WOLFSSL
+typedef struct WOLFSSL_CTX ssl_ctx_st;
+typedef struct WOLFSSL ssl_st;
+typedef struct WOLFSSL_BIO bio_st;
+#endif
+
 class Context {
   ssl_ctx_st *m_ctx;
 
@@ -41,7 +89,15 @@ public:
 
   ~Context() { SSL_CTX_free(m_ctx); }
 
-  ssl_st *open() { return SSL_new(m_ctx); }
+  ssl_st *open() {
+	ssl_st *s = SSL_new(m_ctx);
+#ifdef WITH_LIBRESSL
+#ifdef DEBUG
+	SSL_set_info_callback(s, apps_ssl_info_callback);
+#endif
+#endif
+	 return s;
+    }
 
   void load_server_creds(const KeyType which) {
     int err;
@@ -98,7 +154,7 @@ public:
           SSL_CTX_set1_groups_list(m_ctx, "X25519MLKEM768:X25519:P-256:P-384");
       assert(err == 1);
       set_version(TLS1_3_VERSION, TLS1_3_VERSION);
-#ifndef BORINGSSL
+#ifndef WITH_BORINGSSL
       SSL_CTX_set_ciphersuites(m_ctx, ciphers);
 #else
       // boringssl does not have any direct way to configure TLS1.3 cipher
@@ -173,12 +229,14 @@ class Conn {
   Conn &operator=(const Conn &) = delete;
 
 public:
+  bool connected;
   Conn(ssl_st *ssl)
       : m_ssl(ssl), m_reads_from(nullptr), m_writes_to(BIO_new(BIO_s_mem())),
         m_one_session(nullptr) {
     install_read_bio();
     SSL_set0_wbio(m_ssl, m_writes_to);
     SSL_set_app_data(m_ssl, this);
+    this->connected = false;
   }
 
   Conn(Conn &&other)
@@ -292,8 +350,12 @@ public:
   void show_kx() {
     printf("negotiated v=%s cs=%s kx=%s\n", SSL_get_cipher_version(m_ssl),
            SSL_get_cipher(m_ssl),
-#ifdef BORINGSSL
+#if defined(WITH_BORINGSSL) || defined(WITH_AWS)
            OBJ_nid2ln(SSL_get_negotiated_group(m_ssl))
+#elif defined(WITH_LIBRESSL)
+           OBJ_nid2ln(SSL_get_shared_group(m_ssl, 0))
+#elif defined(WITH_WOLFSSL)
+           "wolfssl does not tell shared/negotiated groups"
 #else
            // OpenSSL 3.5.0 broke the working of OBJ_nid2ln by not registering
            // NIDs for built-in groups.
@@ -326,10 +388,23 @@ static int new_session_cb(SSL *ssl, SSL_SESSION *sess) {
 }
 
 static bool do_handshake_step(Conn &client, Conn &server) {
-  bool s_connected = server.accept();
-  bool c_connected = client.connect();
+  /*
+   * Stop calling SSL_accept()/SSL_connect() after
+   * SSL object moves to connected state.
+   * libressl client and server don't reach connected
+   * state within the same loop iteration.
+   * The server reaches connected state in n-th iteration,
+   * client reaches the connected state in n-th + 1 iteration.
+   * unfortunately calling SSL_accept() on server side after
+   * handshakes completes in n-th iteration makes SSL server
+   * object to enter error state.
+   */
+  if (server.connected == false)
+    server.connected = server.accept();
+  if (client.connected == false)
+    client.connected = client.connect();
 
-  if (s_connected && c_connected) {
+  if (server.connected && client.connected) {
     return false;
   }
 
@@ -651,7 +726,7 @@ static void test_handshake_resume(const unsigned n_threads, Context &server_ctx,
     prefix_server = "handshake-resume\tserver\t";
     prefix_client = "handshake-resume\tclient\t";
 
-#ifdef BORINGSSL
+#ifdef WITH_BORINGSSL
     if (server_ctx.is_tls13()) {
       printf("!!! BoringSSL does not support stateful resumption for TLS1.3\n");
       return;
