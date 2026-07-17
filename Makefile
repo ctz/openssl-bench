@@ -1,22 +1,41 @@
-CXXFLAGS+=-g -Wall -Werror -O3 -std=c++17
+#CXXFLAGS+=-g -Wall -Werror -O3 -std=c++17
+CXXFLAGS+=-g -Wall -Werror -O0 -std=c++17
 
-ifeq (1,$(HOST_OPENSSL))
-  ENV=env
-else ifeq (,$(BORINGSSL))
-  CPPFLAGS+=-I../openssl/include
-  LDFLAGS+=-L../openssl
-  ENV=env LD_LIBRARY_PATH=../openssl
-else
-  CC=clang
-  CXX=clang++
-  CPPFLAGS+=-I../boringssl/include -DBORINGSSL=1
-  LDFLAGS+=-L../boringssl
-  ENV=env LD_LIBRARY_PATH=../boringssl
-endif
-LDLIBS+=-lssl -lcrypto -ldl -lpthread
+LDLIBS+=-ldl -lpthread
 MEMUSAGE=/usr/bin/time -f %M
 
-bench: bench.cc
+AWSLC_LDFLAGS=-L$(AWS_INSTALL_PREFIX)/lib
+AWSLC_LDLIBS=$(LDLIBS) -lssl -lcrypto
+AWSLC_CXXFLAGS=$(CXXFLAGS) -DWITH_AWS -I$(AWS_INSTALL_PREFIX)/include
+bench-aws-lc: bench.cc
+	$(CXX) $(AWSLC_CXXFLAGS) $< -o bench $(AWSLC_LDFLAGS) $(AWSLC_LDLIBS)
+
+BORINGSSL_LDFLAGS=-L$(BORINGSSL_INSTALL_PREFIX)/lib
+BORINGSSL_LDLIBS=$(LDLIBS) -lssl -lcrypto
+BORINGSSL_CXXFLAGS=$(CXXFLAGS) -DWITH_BORINGSSL -I$(BORINGSSL_INSTALL_PREFIX)/include
+bench-boringssl: bench.cc
+	$(CXX) $(BORINGSSL_CXXFLAGS) $< -o bench $(BORINGSSL_LDFLAGS) $(BORINGSSL_LDLIBS)
+
+LIBRESSL_LDFLAGS=-L$(LIBRESSL_INSTALL_PREFIX)/lib
+LIBRESSL_LDLIBS=$(LDLIBS) -lssl -lcrypto
+LIBRESSL_CXXFLAGS=$(CXXFLAGS) -DWITH_LIBRESSL -I$(LIBRESSL_INSTALL_PREFIX)/include
+bench-libressl: bench.cc
+	$(CXX) $(LIBRESSL_CXXFLAGS) $< -o bench $(LIBRESSL_LDFLAGS) $(LIBRESSL_LDLIBS)
+
+OPENSSL_LDFLAGS=-L$(OPENSSL_INSTALL_PREFIX)/lib
+OPENSSL_LDLIBS=$(LDLIBS) -lssl -lcrypto
+OPENSSL_CXXFLAGS=$(CXXFLAGS) -DWITH_OPENSSL -I$(OPENSSL_INSTALL_PREFIX)/include
+bench-openssl: bench.cc
+	$(CXX) $(OPENSSL_CXXFLAGS) $< -o bench $(OPENSSL_LDFLAGS) $(OPENSSL_LDLIBS)
+
+WOLFSSL_LDFLAGS=-L$(WOLFSSL_INSTALL_PREFIX)/lib
+WOLFSSL_LDLIBS=$(LDLIBS) -lwolfssl
+WOLFSSL_CXXFLAGS=$(CXXFLAGS) -DWITH_WOLFSSL -I$(WOLFSSL_INSTALL_PREFIX)/include/wolfssl
+WOLFSSL_CXXFLAGS+=-I$(WOLFSSL_INSTALL_PREFIX)/include/
+bench-wolfssl: bench.cc
+	$(CXX) $(WOLFSSL_CXXFLAGS) $< -o bench $(WOLFSSL_LDFLAGS) $(WOLFSSL_LDLIBS)
+
+
 perf.data: bench
 	$(ENV) perf record -F9999 --call-graph dwarf -- ./bench bulk ECDHE-RSA-AES128-GCM-SHA256 1048576
 	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-aes128-openssl.svg
@@ -32,6 +51,34 @@ extra:
 	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-resume-openssl.svg
 	perf record -F9999 --call-graph dwarf -- $(ENV) ./bench handshake-ticket ECDHE-RSA-AES256-GCM-SHA384
 	perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl > perf-ticket-openssl.svg
+
+measure-aws:
+	$(ENV) ./bench bulk ECDHE-RSA-AES128-GCM-SHA256 1048576
+	$(ENV) ./bench bulk ECDHE-RSA-AES256-GCM-SHA384 1048576
+	$(ENV) ./bench bulk ECDHE-RSA-CHACHA20-POLY1305 1048576
+	$(ENV) ./bench bulk TLS_AES_256_GCM_SHA384 1048576
+	$(ENV) ./bench handshake ECDHE-RSA-AES256-GCM-SHA384
+	$(ENV) ./bench handshake-resume ECDHE-RSA-AES256-GCM-SHA384
+	$(ENV) ./bench handshake-ticket ECDHE-RSA-AES256-GCM-SHA384
+	$(ENV) ./bench handshake TLS_AES_256_GCM_SHA384
+	#$(ENV) ./bench handshake-resume TLS_AES_256_GCM_SHA384
+	$(ENV) ./bench handshake-ticket TLS_AES_256_GCM_SHA384
+	$(ENV) ./bench --ecdsa handshake ECDHE-ECDSA-AES256-GCM-SHA384
+	$(ENV) ./bench --ecdsa handshake TLS_AES_256_GCM_SHA384
+
+measure-wolfssl: bench
+	$(ENV) ./bench bulk ECDHE-RSA-AES128-GCM-SHA256 1048576
+	$(ENV) ./bench bulk ECDHE-RSA-AES256-GCM-SHA384 1048576
+	$(ENV) ./bench bulk ECDHE-RSA-CHACHA20-POLY1305 1048576
+	#$(ENV) ./bench bulk TLS_AES_256_GCM_SHA384 1048576
+	$(ENV) ./bench handshake ECDHE-RSA-AES256-GCM-SHA384
+	$(ENV) ./bench handshake-resume ECDHE-RSA-AES256-GCM-SHA384
+	$(ENV) ./bench handshake-ticket ECDHE-RSA-AES256-GCM-SHA384
+	#$(ENV) ./bench handshake TLS_AES_256_GCM_SHA384
+	#$(ENV) ./bench handshake-resume TLS_AES_256_GCM_SHA384
+	#$(ENV) ./bench handshake-ticket TLS_AES_256_GCM_SHA384
+	#$(ENV) ./bench --ecdsa handshake ECDHE-ECDSA-AES256-GCM-SHA384
+	#$(ENV) ./bench --ecdsa handshake TLS_AES_256_GCM_SHA384
 
 measure: bench
 	$(ENV) ./bench bulk ECDHE-RSA-AES128-GCM-SHA256 1048576
