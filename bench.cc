@@ -54,6 +54,10 @@ apps_ssl_info_callback(const SSL *s, int where, int ret)
       }
 }
 #endif
+void SSL_set0_wbio(SSL *ssl, BIO *wbio)
+{
+  SSL_set_bio(ssl, SSL_get_rbio(ssl), wbio);
+}
 #endif
 
 static bool chkerr(int err) {
@@ -172,7 +176,9 @@ public:
       if (!strcmp(ciphers, "TLS_AES_256_GCM_SHA384")) {
         SSL_CTX_set_compliance_policy(m_ctx, ssl_compliance_policy_cnsa_202407);
       } else if (!strcmp(ciphers, "TLS_CHACHA20_POLY1305_SHA256")) {
-        bssl::SSL_CTX_set_aes_hw_override_for_testing(m_ctx, false);
+        // bssl::SSL_CTX_set_aes_hw_override_for_testing(m_ctx, false);
+        //    is gone since Aug 21st 2026
+        (void)(0);
       } else {
         assert(!strcmp(ciphers, "TLS_AES_128_GCM_SHA256"));
       }
@@ -591,22 +597,24 @@ static void test_handshake_one(Timings &timings_out, const unsigned handshakes,
     double t, time_client_one = 0, time_server_one = 0;
 
     t = get_time();
-    client.connect();
+    client.connected = client.connect();
     client.transfer_to(server);
     time_client_one += get_time() - t;
 
     t = get_time();
-    server.accept();
+    server.connected = server.accept();
     server.transfer_to(client);
     time_server_one += get_time() - t;
 
     t = get_time();
-    client.connect();
+    if (client.connected == false)
+       client.connected = client.connect();
     client.transfer_to(server);
     time_client_one += get_time() - t;
 
     t = get_time();
-    server.accept();
+    if (server.connected == false)
+      server.connected = server.accept();
     server.transfer_to(client);
     time_server_one += get_time() - t;
 
@@ -615,8 +623,8 @@ static void test_handshake_one(Timings &timings_out, const unsigned handshakes,
     time_client += time_client_one;
     time_server += time_server_one;
 
-    assert(server.accept());
-    assert(client.connect());
+    assert(server.connected || server.accept());
+    assert(client.connected || client.connect());
     assert(!server.was_resumed());
     assert(!client.was_resumed());
   }
