@@ -141,6 +141,30 @@ extra-aws-lc:  perf-aes256-aws-lc.svg	\
 	perf-resume-aws-lc.svg		\
 	perf-ticket-aws-lc.svg
 
+extra-boringssl: perf-aes256-boringssl.svg	\
+	perf-chacha-boringssl.svg		\
+	perf-fullhs-boringssl.svg		\
+	perf-resume-boringssl.svg		\
+	perf-ticket-boringssl.svg
+
+extra-libressl: perf-aes256-libressl.svg	\
+	perf-chacha-libressl.svg		\
+	perf-fullhs-libressl.svg		\
+	perf-resume-libressl.svg		\
+	perf-ticket-libressl.svg
+
+extra-openssl: perf-aes256-openssl.svg	\
+	perf-chacha-openssl.svg		\
+	perf-fullhs-openssl.svg		\
+	perf-resume-openssl.svg		\
+	perf-ticket-openssl.svg
+
+extra-wolfssl: perf-aes256-wolfssl.svg	\
+	perf-chacha-wolfssl.svg		\
+	perf-fullhs-wolfssl.svg		\
+	perf-resume-wolfssl.svg		\
+	perf-ticket-wolfssl.svg
+
 ##
 ## aws-lc perf charts
 ##
@@ -442,42 +466,448 @@ measure-wolfssl: bench-wolfssl
 	#LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
 	#		./$< --ecdsa handshake TLS_AES_256_GCM_SHA384
 
-measure-rsa: bench
-	$(ENV) ./bench --rsa handshake TLS_AES_256_GCM_SHA384
-	$(ENV) ./bench --rsa handshake ECDHE-RSA-AES256-GCM-SHA384
+measure-rsa: measure-rsa-aws-lc	\
+	measure-rsa-boringssl	\
+	measure-rsa-libressl	\
+	measure-rsa-openssl	\
+	measure-rsa-wolfssl
 
-measure-ecdsa: bench
-	$(ENV) ./bench --ecdsa handshake TLS_AES_256_GCM_SHA384
-	$(ENV) ./bench --ecdsa handshake ECDHE-ECDSA-AES256-GCM-SHA384
+measure-rsa-aws-lc: bench-aws-lc
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --rsa handshake TLS_AES_256_GCM_SHA384
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --rsa handshake ECDHE-RSA-AES256-GCM-SHA384
 
-memory: bench
-	$(ENV) $(MEMUSAGE) ./bench memory ECDHE-RSA-AES256-GCM-SHA384 100
-	$(ENV) $(MEMUSAGE) ./bench memory ECDHE-RSA-AES256-GCM-SHA384 1000
-	$(ENV) $(MEMUSAGE) ./bench memory ECDHE-RSA-AES256-GCM-SHA384 5000
-	$(ENV) $(MEMUSAGE) ./bench memory TLS_AES_256_GCM_SHA384 100
-	$(ENV) $(MEMUSAGE) ./bench memory TLS_AES_256_GCM_SHA384 1000
-	$(ENV) $(MEMUSAGE) ./bench memory TLS_AES_256_GCM_SHA384 5000
+measure-rsa-boringssl: bench-boringssl
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --rsa handshake TLS_AES_256_GCM_SHA384
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --rsa handshake ECDHE-RSA-AES256-GCM-SHA384
 
-threads: bench
+measure-rsa-libressl: bench-libressl
+	LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --rsa handshake TLS_AES_256_GCM_SHA384
+	LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --rsa handshake ECDHE-RSA-AES256-GCM-SHA384
+
+measure-rsa-openssl: bench-openssl
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --rsa handshake TLS_AES_256_GCM_SHA384
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --rsa handshake ECDHE-RSA-AES256-GCM-SHA384
+
+measure-rsa-wolfssl: bench-wolfssl
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --rsa handshake TLS_AES_256_GCM_SHA384
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --rsa handshake ECDHE-RSA-AES256-GCM-SHA384
+
+measure-ecdsa: measure-ecdsa-aws-lc	\
+	measure-ecdsa-boringssl	\
+	measure-ecdsa-libressl	\
+	measure-ecdsa-openssl	\
+	measure-ecdsa-wolfssl
+
+measure-ecdsa-aws-lc: bench-aws-lc
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --ecdsa handshake TLS_AES_256_GCM_SHA384
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --ecdsa handshake ECDHE-ECDSA-AES256-GCM-SHA384
+
+measure-ecdsa-boringssl: bench-boringssl
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --ecdsa handshake TLS_AES_256_GCM_SHA384
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --ecdsa handshake ECDHE-ECDSA-AES256-GCM-SHA384
+
+measure-ecdsa-libressl: bench-libressl
+	LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --ecdsa handshake TLS_AES_256_GCM_SHA384
+	LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --ecdsa handshake ECDHE-ECDSA-AES256-GCM-SHA384
+
+measure-ecdsa-openssl: bench-openssl
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --ecdsa handshake TLS_AES_256_GCM_SHA384
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --ecdsa handshake ECDHE-ECDSA-AES256-GCM-SHA384
+
+measure-ecdsa-wolfssl: bench-wolfssl
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --ecdsa handshake TLS_AES_256_GCM_SHA384
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
+			./$< --ecdsa handshake ECDHE-ECDSA-AES256-GCM-SHA384
+
+memory: memory-aws-lc		\
+	memory-boringssl	\
+	memory-libressl		\
+	memory-openssl		\
+	memory-wolfssl
+
+memory-aws-lc: bench-aws-lc
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 100
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 1000
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 5000
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory TLS_AES_256_GCM_SHA384 100
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory TLS_AES_256_GCM_SHA384 1000
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			,/$< memory TLS_AES_256_GCM_SHA384 5000
+
+memory-boringssl: bench-boringssl
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 100
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 1000
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 5000
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory TLS_AES_256_GCM_SHA384 100
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory TLS_AES_256_GCM_SHA384 1000
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			,/$< memory TLS_AES_256_GCM_SHA384 5000
+
+memory-libressl: bench-libressl
+	LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 100
+	LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 1000
+	LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 5000
+	LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory TLS_AES_256_GCM_SHA384 100
+	LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory TLS_AES_256_GCM_SHA384 1000
+	LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			,/$< memory TLS_AES_256_GCM_SHA384 5000
+
+memory-openssl: bench-openssl
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 100
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 1000
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 5000
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory TLS_AES_256_GCM_SHA384 100
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory TLS_AES_256_GCM_SHA384 1000
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			,/$< memory TLS_AES_256_GCM_SHA384 5000
+
+memory-wolfssl: bench-wolfssl
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 100
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 1000
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory ECDHE-RSA-AES256-GCM-SHA384 5000
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory TLS_AES_256_GCM_SHA384 100
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			./$< memory TLS_AES_256_GCM_SHA384 1000
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} ${MEMUSAGE} \
+			,/$< memory TLS_AES_256_GCM_SHA384 5000
+
+threads: threads-aws-lc		\
+	threads-boringssl	\
+	threads-libressl	\
+	threads-openssl		\
+	threads-wolfssl
+
+threads-aws-lc: bench-aws-lc
 	for thr in $(shell ../rustls/admin/threads-seq.rs) ; do \
-	  $(ENV) ./bench --threads $$thr handshake ECDHE-RSA-AES256-GCM-SHA384 ; \
-	  $(ENV) ./bench --threads $$thr handshake-resume ECDHE-RSA-AES256-GCM-SHA384 ; \
-	  $(ENV) ./bench --threads $$thr handshake-ticket ECDHE-RSA-AES256-GCM-SHA384 ; \
-	  $(ENV) ./bench --threads $$thr handshake TLS_AES_256_GCM_SHA384 ; \
-	  $(ENV) ./bench --threads $$thr handshake-ticket TLS_AES_256_GCM_SHA384 ; \
-	  $(ENV) ./bench --threads $$thr bulk ECDHE-RSA-AES256-GCM-SHA384 1048576 ; \
-	  $(ENV) ./bench --threads $$thr bulk TLS_AES_256_GCM_SHA384 1048576 ; \
+	  LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake-resume ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake-ticket ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake TLS_AES_256_GCM_SHA384 ; \
+	  LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake-ticket TLS_AES_256_GCM_SHA384 ; \
+	  LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr bulk ECDHE-RSA-AES256-GCM-SHA384 1048576 ; \
+	  LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr bulk TLS_AES_256_GCM_SHA384 1048576 ; \
 	done
 
-thread-latency: bench
-	$(ENV) BENCH_LATENCY=latency-fullhs-tls12 ./bench --threads $$(nproc) handshake ECDHE-RSA-AES256-GCM-SHA384
-	$(ENV) BENCH_LATENCY=latency-fullhs-tls13 ./bench --threads $$(nproc) handshake TLS_AES_256_GCM_SHA384
-	$(ENV) BENCH_LATENCY=latency-resume-tls12 ./bench --threads $$(nproc) handshake-resume ECDHE-RSA-AES256-GCM-SHA384
-	$(ENV) BENCH_LATENCY=latency-resume-tls13 ./bench --threads $$(nproc) handshake-ticket TLS_AES_256_GCM_SHA384
-	cat latency-fullhs-tls12-server-*.tsv > latency-fullhs-tls12-server.tsv
-	cat latency-fullhs-tls13-server-*.tsv > latency-fullhs-tls13-server.tsv
-	cat latency-resume-tls12-server-*.tsv > latency-resume-tls12-server.tsv
-	cat latency-resume-tls13-server-*.tsv > latency-resume-tls13-server.tsv
+threads-boringssl: bench-boringssl
+	for thr in $(shell ../rustls/admin/threads-seq.rs) ; do \
+	  LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake-resume ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake-ticket ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake TLS_AES_256_GCM_SHA384 ; \
+	  LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake-ticket TLS_AES_256_GCM_SHA384 ; \
+	  LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr bulk ECDHE-RSA-AES256-GCM-SHA384 1048576 ; \
+	  LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr bulk TLS_AES_256_GCM_SHA384 1048576 ; \
+	done
+
+#
+# note: handshake-resume is missing for libressl, libressl does
+# not support session resumption
+#
+threads-libressl: bench-libressl
+	for thr in $(shell ../rustls/admin/threads-seq.rs) ; do \
+	  LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake TLS_AES_256_GCM_SHA384 ; \
+	  LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr bulk ECDHE-RSA-AES256-GCM-SHA384 1048576 ; \
+	  LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr bulk TLS_AES_256_GCM_SHA384 1048576 ; \
+	done
+
+threads-openssl: bench-openssl
+	for thr in $(shell ../rustls/admin/threads-seq.rs) ; do \
+	  LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake-resume ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake-ticket ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake TLS_AES_256_GCM_SHA384 ; \
+	  LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake-ticket TLS_AES_256_GCM_SHA384 ; \
+	  LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr bulk ECDHE-RSA-AES256-GCM-SHA384 1048576 ; \
+	  LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr bulk TLS_AES_256_GCM_SHA384 1048576 ; \
+	done
+
+threads-wolfssl: bench-wolfssl
+	for thr in $(shell ../rustls/admin/threads-seq.rs) ; do \
+	  LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake-resume ECDHE-RSA-AES256-GCM-SHA384 ; \
+	  LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
+	    ./$< --threads $$thr handshake-ticket ECDHE-RSA-AES256-GCM-SHA384 ; \
+	done
+#
+# currently becnc.cc trips assert at line 163:
+#
+#    if (!strcmp(ciphers, "TLS_AES_128_GCM_SHA256") ||
+#        !strcmp(ciphers, "TLS_AES_256_GCM_SHA384") ||
+#        !strcmp(ciphers, "TLS_CHACHA20_POLY1305_SHA256")) {
+#      int err =
+#          SSL_CTX_set1_groups_list(m_ctx, "X25519MLKEM768:X25519:P-256:P-384");
+#      assert(err == 1);
+#      set_version(TLS1_3_VERSION, TLS1_3_VERSION);
+#ifndef WITH_BORINGSSL
+#      SSL_CTX_set_ciphersuites(m_ctx, ciphers);
+#
+#	  LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
+#	  	./$< --threads $$thr handshake TLS_AES_256_GCM_SHA384 ; \
+#	  LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
+#	  	./$< --threads $$thr handshake-ticket TLS_AES_256_GCM_SHA384 ; \
+#	  LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
+#	  	./$< --threads $$thr bulk ECDHE-RSA-AES256-GCM-SHA384 1048576 ; \
+#	  LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV} \
+#	  	./$< --threads $$thr bulk TLS_AES_256_GCM_SHA384 1048576 ; \
+#
+
+thread-latency: thread-latency-aws-lc	\
+	thread-latency-boringssl	\
+	thread-latency-libressl		\
+	thread-latency-openssl		\
+	thread-latency-wolfssl
+
+thread-latency-aws-lc: latency-fullhs-tls12-server-aws-lc.tsv	\
+	latency-fullhs-tls13-server-aws-lc.tsv			\
+	latency-resume-tls12-server-aws-lc.tsv			\
+	latency-resume-tls13-server-aws-lc.tsv
+
+thread-latency-boringssl: latency-fullhs-tls12-server-boringssl.tsv	\
+	latency-fullhs-tls13-server-boringssl.tsv			\
+	latency-resume-tls12-server-boringssl.tsv			\
+	latency-resume-tls13-server-boringssl.tsv
+
+thread-latency-libressl: latency-fullhs-tls12-server-libressl.tsv	\
+	latency-fullhs-tls13-server-libressl.tsv			\
+	latency-resume-tls12-server-libressl.tsv			\
+	latency-resume-tls13-server-libressl.tsv
+
+thread-latency-openssl: latency-fullhs-tls12-server-openssl.tsv	\
+	latency-fullhs-tls13-server-openssl.tsv			\
+	latency-resume-tls12-server-openssl.tsv			\
+	latency-resume-tls13-server-openssl.tsv
+
+thread-latency-wolfssl: latency-fullhs-tls12-server-wolfssl.tsv	\
+	latency-fullhs-tls13-server-wolfssl.tsv			\
+	latency-resume-tls12-server-wolfssl.tsv			\
+	latency-resume-tls13-server-wolfssl.tsv
+
+latency-fullhs-tls12-server-aws-lc.tsv: bench-aws-lc
+	rm -f latency-fullhs-tls12-*.tsv
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-fullhs-tls12	\
+			./$< --threads $$(nproc) handshake ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-fullhs-tls12-server-*.tsv > $@
+
+latency-fullhs-tls13-server-aws-lc.tsv: bench-aws-lc
+	rm -f latency-fullhs-tls13-*.tsv
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-fullhs-tls13	\
+			./$< --threads $$(nproc) handshake ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-fullhs-tls13-server-*.tsv > $@
+
+latency-resume-tls12-server-aws-lc.tsv: bench-aws-lc
+	rm -f latency-resume-tls12-*.tsv
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-resume-tls12	\
+			./$< --threads $$(nproc) handshake-resume ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-resume-tls12-server-*.tsv > $@
+
+latency-resume-tls13-server-aws-lc.tsv: bench-aws-lc
+	rm -f latency-resume-tls13-*.tsv
+	LD_LIBRARY_PATH=${AWS_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-resume-tls13	\
+			./$< --threads $$(nproc) handshake-ticket TLS_AES_256_GCM_SHA384
+	cat latency-resume-tls13-server-*.tsv > $@
+
+latency-fullhs-tls12-server-boringssl.tsv: bench-boringssl
+	rm -f latency-fullhs-tls12-*.tsv
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-fullhs-tls12	\
+			./$< --threads $$(nproc) handshake ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-fullhs-tls12-server-*.tsv > $@
+
+latency-fullhs-tls13-server-boringssl.tsv: bench-boringssl
+	rm -f latency-fullhs-tls13-*.tsv
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-fullhs-tls13	\
+			./$< --threads $$(nproc) handshake ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-fullhs-tls13-server-*.tsv > $@
+
+latency-resume-tls12-server-boringssl.tsv: bench-boringssl
+	rm -f latency-resume-tls12-*.tsv
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-resume-tls12	\
+			./$< --threads $$(nproc) handshake-resume ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-resume-tls12-server-*.tsv > $@
+
+latency-resume-tls13-server-boringssl.tsv: bench-boringssl
+	rm -f latency-resume-tls13-*.tsv
+	LD_LIBRARY_PATH=${BORINGSSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-resume-tls13	\
+			./$< --threads $$(nproc) handshake-ticket TLS_AES_256_GCM_SHA384
+	cat latency-resume-tls13-server-*.tsv > $@
+
+latency-fullhs-tls12-server-libressl.tsv: bench-libressl
+	rm -f latency-fullhs-tls12-*.tsv
+	LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-fullhs-tls12	\
+			./$< --threads $$(nproc) handshake ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-fullhs-tls12-server-*.tsv > $@
+
+latency-fullhs-tls13-server-libressl.tsv: bench-libressl
+	rm -f latency-fullhs-tls13-*.tsv
+	LD_LIBRARY_PATH=${LIBRESSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-fullhs-tls13	\
+			./$< --threads $$(nproc) handshake ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-fullhs-tls13-server-*.tsv > $@
+
+latency-resume-tls12-server-libressl.tsv: bench-libressl
+	touch $@
+
+latency-resume-tls13-server-libressl.tsv: bench-libressl
+	touch $@
+
+latency-fullhs-tls12-server-openssl.tsv: bench-openssl
+	rm -f latency-fullhs-tls12-server-*.tsv
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-fullhs-tls12	\
+			./$< --threads $$(nproc) handshake ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-fullhs-tls12-server-*.tsv > $@
+
+latency-fullhs-tls13-server-openssl.tsv: bench-openssl
+	rm -f latency-fullhs-tls13-server-*.tsv
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-fullhs-tls13	\
+			./$< --threads $$(nproc) handshake ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-fullhs-tls13-server-*.tsv > $@
+
+latency-resume-tls12-server-openssl.tsv: bench-openssl
+	rm -f latency-resume-tls12-server-*.tsv
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-resume-tls12	\
+			./$< --threads $$(nproc) handshake-resume ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-resume-tls12-server-*.tsv > $@
+
+latency-resume-tls13-server-openssl.tsv: bench-openssl
+	rm -f latency-resume-tls13-server-*.tsv
+	LD_LIBRARY_PATH=${OPENSSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-resume-tls13	\
+			./$< --threads $$(nproc) handshake-ticket TLS_AES_256_GCM_SHA384
+	cat latency-resume-tls13-server-*.tsv > $@
+
+latency-fullhs-tls12-server-wolfssl.tsv: bench-wolfssl
+	rm -f latency-fullhs-tls12-server-*.tsv
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-fullhs-tls12	\
+			./$< --threads $$(nproc) handshake ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-fullhs-tls12-server-*.tsv > $@
+
+latency-fullhs-tls13-server-wolfssl.tsv: bench-wolfssl
+	rm -f latency-fullhs-tls13-server-*.tsv
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-fullhs-tls13	\
+			./$< --threads $$(nproc) handshake ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-fullhs-tls13-server-*.tsv > $@
+
+latency-resume-tls12-server-wolfssl.tsv: bench-wolfssl
+	rm -f latency-resume-tls12-server-*.tsv
+	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV}	\
+			BENCH_LATENCY=latency-resume-tls12	\
+			./$< --threads $$(nproc) handshake-resume ECDHE-RSA-AES256-GCM-SHA384
+	cat latency-resume-tls12-server-*.tsv > $@
+
+#
+# currently becnc.cc trips assert at line 163:
+#
+#    if (!strcmp(ciphers, "TLS_AES_128_GCM_SHA256") ||
+#        !strcmp(ciphers, "TLS_AES_256_GCM_SHA384") ||
+#        !strcmp(ciphers, "TLS_CHACHA20_POLY1305_SHA256")) {
+#      int err =
+#          SSL_CTX_set1_groups_list(m_ctx, "X25519MLKEM768:X25519:P-256:P-384");
+#      assert(err == 1);
+#      set_version(TLS1_3_VERSION, TLS1_3_VERSION);
+#ifndef WITH_BORINGSSL
+#      SSL_CTX_set_ciphersuites(m_ctx, ciphers);
+#else
+latency-resume-tls13-server-wolfssl.tsv: bench-wolfssl
+	touch $@
+#	rm -f latency-resume-tls13-server-*.tsv
+#	LD_LIBRARY_PATH=${WOLFSSL_INSTALL_PREFIX}/lib ${ENV}	\
+#			BENCH_LATENCY=latency-resume-tls13	\
+#			./$< --threads $$(nproc) handshake-ticket TLS_AES_256_GCM_SHA384
+#	cat latency-resume-tls13-server-*.tsv > $@
 
 format: *.cc
 	clang-format -i *.cc
